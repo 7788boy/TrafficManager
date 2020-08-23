@@ -1,0 +1,87 @@
+
+#pragma once
+
+#include <memory>
+
+#include "carla/client/DebugHelper.h"
+
+#include "carla/trafficmanager/DataStructures.h"
+#include "carla/trafficmanager/InMemoryMap.h"
+#include "carla/trafficmanager/LocalizationUtils.h"
+#include "carla/trafficmanager/Parameters.h"
+#include "carla/trafficmanager/RandomGenerator.h"
+#include "carla/trafficmanager/TrackTraffic.h"
+#include "carla/trafficmanager/SimulationState.h"
+#include "carla/trafficmanager/Stage.h"
+
+namespace carla {
+namespace traffic_manager {
+
+namespace cc = carla::client;
+
+using LocalMapPtr = std::shared_ptr<InMemoryMap>;
+using LaneChangeLocationMap = std::unordered_map<ActorId, cg::Location>;
+
+/// This class has functionality to maintain a horizon of waypoints ahead
+/// of the vehicle for it to follow.
+/// The class is also responsible for managing lane change decisions and
+/// modify the waypoint trajectory appropriately.
+class LocalizationStage : Stage {
+private:
+  const std::vector<ActorId> &vehicle_id_list;
+  BufferMap &buffer_map;
+  const SimulationState &simulation_state;
+  TrackTraffic &track_traffic;
+  const LocalMapPtr &local_map;
+  Parameters &parameters;
+  LocalizationFrame &output_array;
+  cc::DebugHelper &debug_helper;
+  LaneChangeLocationMap last_lane_change_location;
+  ActorIdSet vehicles_at_junction;
+  using SimpleWaypointPair = std::pair<SimpleWaypointPtr, SimpleWaypointPtr>;
+  std::unordered_map<ActorId, SimpleWaypointPair> vehicles_at_junction_entrance;
+  RandomGenerator<> pgen;
+
+  SimpleWaypointPtr AssignLaneChange(const ActorId actor_id,
+                                     const cg::Location vehicle_location,
+                                     const float vehicle_speed,
+                                     bool force, bool direction);
+
+  void DrawBuffer(Buffer &buffer);
+
+  void ExtendAndFindSafeSpace(const ActorId actor_id,
+                              const bool is_at_junction_entrance,
+                              Buffer &waypoint_buffer);
+
+public:
+  LocalizationStage(const std::vector<ActorId> &vehicle_id_list,
+                    BufferMap &buffer_map,
+                    const SimulationState &simulation_state,
+                    TrackTraffic &track_traffic,
+                    const LocalMapPtr &local_map,
+                    Parameters &parameters,
+                    LocalizationFrame &output_array,
+                    cc::DebugHelper &debug_helper);
+
+  void Update(const unsigned long index) override;
+
+  void RemoveActor(const ActorId actor_id) override;
+
+  void Reset() override;
+
+  void DrawLeader(ActorId actor_id, LocalizationData &output);
+  void updateLeader(const unsigned long index);
+  std::pair<ActorId, ActorId> collectLeadingVehicle(const unsigned long index);
+  bool isOverlapped(ActorId actor_id, ActorId target_id, float target_location_y) const;
+  std::vector<std::vector<float>> getMatrix(cg::Location actor_location, cg::Rotation actor_rotation);//local transfer to global
+  std::vector<float> GlobalToLocal(std::vector<std::vector<float>> M, cg::Location global_location);
+  void matrixMultiply(std::vector<std::vector<float>> M, std::vector<float> V, std::vector<float> result);
+  void getCofactor(std::vector<std::vector<float>> A, std::vector<std::vector<float>> temp, unsigned p, unsigned q, unsigned n);
+  float determinant(std::vector<std::vector<float>> A, unsigned n);
+  void adjoint(std::vector<std::vector<float>> A,std::vector<std::vector<float>> adj);
+  std::vector<std::vector<float>> inverse(std::vector<std::vector<float>> A);
+
+};
+
+} // namespace traffic_manager
+} // namespace carla
