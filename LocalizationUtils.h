@@ -44,6 +44,9 @@ namespace traffic_manager {
                             const cg::Vector3D &heading_vector,
                             const cg::Location &target_location);
 
+  float VectorDotProduct(const cg::Vector3D &heading_vector, 
+                       const cg::Vector3D &next_vector);
+
   // Function to add a waypoint to a path buffer and update waypoint tracking.
   void PushWaypoint(ActorId actor_id, TrackTraffic& track_traffic,
                     Buffer& buffer, SimpleWaypointPtr& waypoint);

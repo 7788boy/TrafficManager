@@ -167,18 +167,17 @@ void LocalizationStage::Update(const unsigned long index) {
 
   ExtendAndFindSafeSpace(actor_id, is_at_junction_entrance, waypoint_buffer);
 
-  updateLeader(index);
-
+  UpdateLeader(index);
+  UpdateNeighbor(index);
   
-
   // Editing output array
   LocalizationData &output = output_array.at(index);
   output.is_at_junction_entrance = is_at_junction_entrance;
 
-  if (actor_id == vehicle_id_list.at(0))
-  {
-    DrawLeader(actor_id, output);
-  }
+  // if (actor_id == vehicle_id_list.at(0))
+  // {
+  //   DrawLeader(actor_id, output);
+  // }
 
   if (is_at_junction_entrance) {
     const SimpleWaypointPair &safe_space_end_points = vehicles_at_junction_entrance.at(actor_id);
@@ -416,167 +415,237 @@ void LocalizationStage::DrawBuffer(Buffer &buffer) {
 
 void LocalizationStage::DrawLeader(ActorId actor_id, LocalizationData &output) {
   cg::Location actor_location = simulation_state.GetLocation(actor_id);
-  cg::Location first_location = simulation_state.GetLocation(output.leader.main_leader);
-  cg::Location second_location = simulation_state.GetLocation(output.leader.potential_leader);
   debug_helper.DrawPoint(actor_location, 1.0f, {255u, 0u, 0u}, 0.5, true);
-  debug_helper.DrawPoint(first_location, 1.0f, {0u, 255u, 0u}, 0.5, true);
-  debug_helper.DrawPoint(second_location, 1.0f, {0u, 0u, 255u}, 0.5, true);
+  
+  if(output.leader.main_leader)
+  {
+    cg::Location first_location = simulation_state.GetLocation(output.leader.main_leader.get());
+    debug_helper.DrawPoint(first_location, 1.0f, {0u, 255u, 0u}, 0.5, true);
+    }
+
+  if(output.leader.potential_leader)
+  { 
+    cg::Location second_location = simulation_state.GetLocation(output.leader.potential_leader.get());
+    debug_helper.DrawPoint(second_location, 1.0f, {0u, 0u, 255u}, 0.5, true);
+  }
 }
 
 // Leader
+/*
 void LocalizationStage::updateLeader(const unsigned long index)
 {
-  LocalizationData &output = output_array.at(index);
+  //LocalizationData &output = output_array.at(index);
 
-  //mSubject->mSituationData->mNeighbor->mPassedLeadingVehicle = NULL;
-  //mSubject->mSituationData->mNeighbor->mExpectedLeadingVehicle = NULL;
-  //mSubject->mBlockage = NULL;
-  
-  std::pair<ActorId, ActorId> leaders = collectLeadingVehicle(index); // first = main leader, second = potential leader.
+  // first = main leader, second = potential leader.
+  std::pair<std::optional<ActorId>, std::optional<ActorId>> leaders = collectLeadingVehicle(index); 
   output.leader.main_leader = leaders.first;
   output.leader.potential_leader = leaders.second;
 }
+*/
 
-std::pair<ActorId, ActorId> LocalizationStage::collectLeadingVehicle(const unsigned long index)
+void LocalizationStage::UpdateLeader(const unsigned long index)
 {
   const ActorId actor_id = vehicle_id_list.at(index);
   
-  const cg::Location actor_location = simulation_state.GetLocation(actor_id); // need to transfrom to local.
-  const cg::Rotation actor_rotation = simulation_state.GetRotation(actor_id);
-  std::vector<std::vector<float>> M;
-  M.resize(4, std::vector<float>(4, 0.0f));
-  M = getMatrix(actor_location, actor_rotation);
-  std::vector<std::vector<float>> M_inv;
-  M_inv.resize(4, std::vector<float>(4, 0.0f));
-  M_inv = inverse(M);
+  const cg::Location actor_location = simulation_state.GetLocation(actor_id);
+  LocalizationData &output = output_array.at(index);
+  // std::vector<std::vector<float>> M;
+  // M.resize(4, std::vector<float>(4, 0.0f));
+  // M = getMatrix(actor_location, actor_rotation);
+  // std::vector<std::vector<float>> M_inv;
+  // M_inv.resize(4, std::vector<float>(4, 0.0f));
+  // M_inv = inverse(M);
   //float actor_local_location[4][1] = GlobalToLocal(M_inv, actor_location);
 
-  float actor_offset = simulation_state.GetDimensions(actor_id).x;  //getOffset() + getLength() / 2.0f;
+  float actor_offset = simulation_state.GetDimensions(actor_id).x;
   SimpleWaypointPtr actor_waypoint = local_map->GetWaypoint(actor_location);
-  crd::RoadId actor_road = actor_waypoint->GetWaypoint()->GetRoadId();
-  crd::LaneId actor_lane = actor_waypoint->GetWaypoint()->GetLaneId();
-  //bool isPassFind = false;
-  //bool isExpFind = false;
-  ActorId expectedPreVeh = 1000000;
-  ActorId passedPreVeh = 1000000;
+  // crd::RoadId actor_road = actor_waypoint->GetWaypoint()->GetRoadId();
+  // crd::LaneId actor_lane = actor_waypoint->GetWaypoint()->GetLaneId();
+  boost::optional<ActorId> expectedPreVeh; // c++17, but c++14.
+  boost::optional<ActorId> passedPreVeh;
 
-  // Find leading vehicles: one is able to be overtaked, one is expected to leading vehicle after overtaking
-  // MTS_VehicleController *vehController =  subject->getCurrentController();
-  // MTS_Lane *nextLane = subject->getNextLane();
-  // MTS_Edge *nextEdge = mEdge;
-  // if( nextLane ) nextEdge = nextLane->getEdge();
-
-  // if the subject is the begin of this lane, it means that the leading vehicle may be the next lane 
-  // which the subject will enter
-  
-  //const float LOOK_DIS = 1500.0f;
   float minOffset = actor_offset;
-  float maxOffset = minOffset + MAX_OBSERVING_DISTANCE; //subject->getMaxObservingDistance();	
-  float passOffset = FLT_MAX;
-  float expectOffset = FLT_MAX;
-  //float blockageOffset = FLT_MAX;
-
-  // MTS_Vehicle *blockage = subject->getBlockage();
-  // if( blockage && blockage->getCurrentController()->onEdge( mEdge )  ) 
-  //   blockageOffset = blockage->getCurrentController()->getOffset() - 
-  //                   blockage->getCurrentController()->getLength() / 2.0f;
-
-  // //**************Section 1 - Find Leaders in coming queue *************//
-  // /*if( ( minOffset < 0 || maxOffset < 0 ) && !subject->getTransitController()->idle() )
-  //   collectLeadingVehicleInComingQueue( subject , subjectOffset , passedPreVeh , expectedPreVeh );*/
-  // if( vehController->onEdge( mEdge ) && ( minOffset < 0 || maxOffset < 0 ) )
-  //   collectLeadingVehicleInComingQueue( subject , subjectOffset , passedPreVeh , expectedPreVeh );
-  // bool passFound = passedPreVeh != NULL;
-  // bool expectFound = expectedPreVeh != NULL;
-
-  // if( expectFound ) return;
-
-  //**************Section 2 - Find Leaders on this edge *************//
-  // First, collect vehicles in the block between minOffset and maxOffset.
-  // std::vector< MTS_Vehicle* > vehInBlock;
-  // getVehicleInBlock( minOffset , maxOffset , vehInBlock );
-  // MTS_Lane *leftLane = getLeftLane();
-  // MTS_Lane *rightLane = getRightLane();
-
-  // if(leftLane) 
-  //   leftLane->getVehicleInBlock( minOffset , maxOffset , vehInBlock );
-  // if(rightLane) 
-  //   rightLane->getVehicleInBlock( minOffset , maxOffset , vehInBlock );
-
-  // Second, check if the vehicle is overlapped with the subject vehicle and the offset is closer to vehOffset
-  //int vehSize = vehicle_id_list.size();
-
-  //std::iterator::std::vector<ActorId> it = vehicle_id_list.begin();
+  float maxOffset = minOffset + MAX_OBSERVING_DISTANCE;
+  //float passOffset = FLT_MAX;
+  //float expectOffset = FLT_MAX;
+  
   for(ActorId target_id: vehicle_id_list)
   {
-    if( target_id == actor_id) //vehInBlock[i] == subject )
+    if( target_id == actor_id)
       continue;
-
-    //MTS_VehicleController *controller = vehInBlock[i]->getCurrentController();
-    //len / 2.0f;
-    
-     //vehInBlock[i] );}
-    // float extendedGap = vehController->getExtendedGap( vehInBlock[i] );
 
     const cg::Location target_location = simulation_state.GetLocation(target_id);
     SimpleWaypointPtr target_waypoint = local_map->GetWaypoint(target_location);
-    crd::RoadId target_road = target_waypoint->GetWaypoint()->GetRoadId();
-    crd::LaneId target_lane = target_waypoint->GetWaypoint()->GetLaneId();
+    // crd::RoadId target_road = target_waypoint->GetWaypoint()->GetRoadId();
+    // crd::LaneId target_lane = target_waypoint->GetWaypoint()->GetLaneId();
+    cg::Vector3D actor_forward_vector = actor_waypoint->GetForwardVector();
+    cg::Vector3D target_forward_vector = target_waypoint->GetForwardVector();
+    
+    // location heady
+    //float target_direction = DeviationDotProduct(actor_location, actor_forward_vector, target_location);
+    // distance.
+    float target_distance = actor_waypoint->Distance(target_waypoint);
+    // heading.
+    float target_heading = VectorDotProduct(actor_forward_vector, target_forward_vector);
 
-    if (actor_road == target_road && abs(actor_lane -  target_lane) <= 1 && actor_waypoint->Distance(target_waypoint) <= maxOffset)
+    if(target_heading >= 0.0f && target_distance <= maxOffset) //&& target_direction > 0.0f 
+    // if (actor_road == target_road && abs(actor_lane -  target_lane) <= 1 && actor_waypoint->Distance(target_waypoint) <= maxOffset)
     {
-      float target_length = simulation_state.GetDimensions(target_id).x;// controller->getLength();
-      std::vector<float> target_local_location(3, 0.0f);
-      //target_local_location.resize(3, 0.0f);
-      target_local_location= GlobalToLocal(M_inv, target_location);
+      float target_length = simulation_state.GetDimensions(target_id).x;
+      std::array<float, 4> target_local_location = GlobalToLocal(actor_id, target_location);
       float target_offset = target_local_location[0] - target_length; 
-
       bool blocked = isOverlapped(actor_id, target_id, target_local_location[1]);
 
-      if( target_offset < passOffset && target_offset > actor_offset && blocked ) // !passFound && // Situation 1: the is closer than current passed leading vehicle
+      if( target_offset > 0.0f && blocked ); //target_offset < passOffset && blocked ) 
       {
-      
-        //this part need to consider the none-lane case, need to consider the lateral information(remove the)
-
         expectedPreVeh = passedPreVeh;
-        passedPreVeh = target_id; //vehInBlock[i];
+        passedPreVeh = target_id;
+        maxOffset = target_distance;
+        // expectOffset = passOffset;
+        //passOffset = target_offset;
 
-        expectOffset = passOffset;
-        passOffset = target_offset;
-        //isPassFind = true;
       }
-      else if(target_offset < expectOffset && target_offset > actor_offset && blocked ) //  !expectFound &&  // Situation 2: the is closer than current expected leading vehicle
-      {
-        expectedPreVeh = target_id; //vehInBlock[i];
-        expectOffset = target_offset;
-        //isExpFind = true;
-      }
+      // else if(target_offset < expectOffset && target_offset > actor_offset && blocked )
+      // {
+      //   expectedPreVeh = target_id; 
+      //   expectOffset = target_offset;
+      // }
     }
-    // if( blocked && vehInBlock[i]->broken()  && 
-    //   candidateOffset < blockageOffset )
-    // {
-    //   subject->setBlockage( vehInBlock[i] );
-    //   blockageOffset = candidateOffset;
-    // }
+  }
+  output.leader.main_leader = passedPreVeh;
+  output.leader.potential_leader = expectedPreVeh;
+}
+
+// Neighbor
+void LocalizationStage::UpdateNeighbor(const unsigned long index)
+{
+  GetLeftVehicle(index);
+  GetRightVehicle(index);
+  GetSurroundVehicle(index);
+}
+
+void LocalizationStage::GetLeftVehicle(const unsigned long index)
+{
+  LocalizationData &output = output_array.at(index);
+  const ActorId actor_id = vehicle_id_list.at(index);
+  const cg::Location actor_location = simulation_state.GetLocation(actor_id);
+  SimpleWaypointPtr actor_waypoint = local_map->GetWaypoint(actor_location);
+  //cg::Vector3D actor_forward_vector = actor_waypoint->GetForwardVector();
+  //float minOffset = -simulation_state.GetDimensions(actor_id).x;
+  float maxOffset = simulation_state.GetDimensions(actor_id).x;
+  boost::optional<ActorId> leftVeh;
+  float min_lat_diff = FLT_MAX;
+  float block_len = maxOffset;
+
+  for(ActorId target_id: vehicle_id_list)
+  {
+    if( target_id == actor_id)
+      continue;
+
+    const cg::Location target_location = simulation_state.GetLocation(target_id);
+    SimpleWaypointPtr target_waypoint = local_map->GetWaypoint(target_location);
+    //float target_direction = DeviationDotProduct(actor_location, actor_forward_vector, target_location);
+    // need to filter oppsite vehicle?
+    std::array<float, 4> target_local_location = GlobalToLocal(actor_id, target_location);
+    float halfVehLen = simulation_state.GetDimensions(target_id).x;
+    float vehOffset = target_local_location[0]; 
+    float dis_long = std::abs(vehOffset);
+    float lat_diff = -target_local_location[1];
+    float lat_diff_abs = std::abs(lat_diff);
+    
+    // placed in the block // left hand side or right hand side of the baseOffset // make sure the vehicle is not the referenced vehicle // distance is smaller
+    if(dis_long < block_len + halfVehLen && (lat_diff < 0) && lat_diff_abs != 0.0f && lat_diff_abs < min_lat_diff)
+    {
+      leftVeh = target_id;
+      min_lat_diff = lat_diff_abs;
+    }
   }
 
-  //expectFound = expectedPreVeh != NULL;
+  output.surrounding.LeftVehicle = leftVeh;
+}
 
-  std::pair<ActorId, ActorId> leaders = std::make_pair(passedPreVeh, expectedPreVeh);
+void LocalizationStage::GetRightVehicle(const unsigned long index)
+{
+  LocalizationData &output = output_array.at(index);
+  const ActorId actor_id = vehicle_id_list.at(index);
+  //float minOffset = -simulation_state.GetDimensions(actor_id).x;
+  float maxOffset = simulation_state.GetDimensions(actor_id).x;
+  boost::optional<ActorId> rightVeh;
+  float min_lat_diff = FLT_MAX;
+  //float block_middle = 0.0f;
+  float block_len = maxOffset;
 
-  return leaders;
-  //**************Section 3 - Find Leaders on next edge *************//
+  for(ActorId target_id: vehicle_id_list)
+  {
+    if( target_id == actor_id)
+      continue;
+
+    const cg::Location target_location = simulation_state.GetLocation(target_id);
+    SimpleWaypointPtr target_waypoint = local_map->GetWaypoint(target_location);
+    //float target_direction = DeviationDotProduct(actor_location, heading_vector, target_location);
+    // need to filter oppsite vehicle?
+    std::array<float, 4> target_local_location = GlobalToLocal(actor_id, target_location);
+    float halfVehLen = simulation_state.GetDimensions(target_id).x;
+    float vehOffset = target_local_location[0]; 
+    float dis_long = std::abs(vehOffset);
+    float lat_diff = -target_local_location[1];
+    float lat_diff_abs = std::abs(lat_diff);
+    
+    // placed in the block // left hand side or right hand side of the baseOffset // make sure the vehicle is not the referenced vehicle // distance is smaller
+    if(dis_long < block_len + halfVehLen && (lat_diff > 0) && lat_diff_abs != 0.0f && lat_diff_abs < min_lat_diff)
+    {
+      rightVeh = target_id;
+      min_lat_diff = lat_diff_abs;
+    }
+  }
+
+  output.surrounding.RightVehicle = rightVeh;
+}
+
+void LocalizationStage::GetSurroundVehicle(const unsigned long index)
+{
+  float observe_distance = 2000.0;
+  float max_distance = observe_distance;
+  float min_distance = observe_distance; 
+  LocalizationData &output = output_array.at(index);
+  const ActorId actor_id = vehicle_id_list.at(index);
   
-  // MTS_Lane* tempNextLane = subject->findNextLane();
-  // if( tempNextLane != NULL && tempNextLane != this && !expectFound)
-  // {
-  //   float temp_offset = subject->getOffset();
-  //   float temp_lateralOffset = subject->getLateralOffset();
-  //   tempNextLane->positionTranslate(this,temp_offset,temp_lateralOffset); 
-  //   float subjectOffsetOnNextEdge = temp_offset+ vehController->getLength() / 2.0f;
-  //   tempNextLane->collectLeadingVehicle( subject , subjectOffsetOnNextEdge , passedPreVeh , expectedPreVeh );
-  // }
+  for(ActorId target_id: vehicle_id_list)
+  {
+    if( target_id == actor_id)
+      continue;
 
+    // target location transform to local coordinate.
+    const cg::Location target_location = simulation_state.GetLocation(target_id);
+    std::array<float, 4> target_local_location = GlobalToLocal(actor_id, target_location);
+
+    // need to filter other road or lane or direction
+    if( !isOverlapped(actor_id, target_id, target_local_location[1]))
+    {
+      if(target_local_location[0] >= 0.0 && target_local_location[0] <= max_distance)
+      {
+        if(target_local_location[1] < 0 )
+        {
+          output.surrounding.neighbor[Direction::LEFTFRONT]->vehicles.push_back(target_id);
+        }
+        else if(target_local_location[1] > 0 )
+        {
+          output.surrounding.neighbor[Direction::RIGHTFRONT]->vehicles.push_back(target_id);
+        }
+      }
+      else if (target_local_location[0] < 0.0 && target_local_location[0] >= min_distance)
+      {
+        if(target_local_location[1] < 0 )
+        {
+          output.surrounding.neighbor[Direction::LEFTREAR]->vehicles.push_back(target_id);
+        }
+        else if(target_local_location[1] > 0 )
+        {
+          output.surrounding.neighbor[Direction::RIGHTREAR]->vehicles.push_back(target_id);
+        }
+      }
+    }
+  }
 }
 /*
 // Situation
@@ -589,7 +658,8 @@ void LocalizationStage::updateRegion()
   }
   
   mRegion.clear();
-  mSpaceOriented = false;
+  
+  //mSpaceOriented = false;
   MTS_Vehicle *pred = mSubject->getPassedLeadingVehicle();
 
   if( mSubject->getVehicleType()->getTypeCode() != 2 )
@@ -1135,369 +1205,6 @@ void LocalizationStage::_findGapAndSpeed( const MTS_Vehicle *veh , float minLate
     region.maxPassingSpeed = veh->getLane()->getMaxPassingSpeed();
   }
 }
-
-// Neighbor
-void LocalizationStage::resetNeighbor()
-{
-  mSituationData->mNeighbor->reset();
-  mSituationData->mNeighbor->mLeftVehicle = this;
-  mSituationData->mNeighbor->mRightVehicle = this;
-} 
-
-const std::vector< MTS_Vehicle* >& LocalizationStage::getLeftRearVehicles( )
-{
-  if( mSituationData->mNeighbor->mLeftRearVehiclesUpdated )
-    return mSituationData->mNeighbor->mLeftRearVehicles;
-  mSituationData->mNeighbor->mLeftRearVehiclesUpdated = true;
-  mSituationData->mNeighbor->mLeftRearVehicles.clear();
-  getLeftRearVehicles( 2000.0f , mSituationData->mNeighbor->mLeftRearVehicles );
-  return mSituationData->mNeighbor->mLeftRearVehicles;
-}
-
-const std::vector< MTS_Vehicle* >& LocalizationStage::getRightRearVehicles()
-{
-  if( mSituationData->mNeighbor->mRightRearVehiclesUpdated )
-    return mSituationData->mNeighbor->mRightRearVehicles;
-  mSituationData->mNeighbor->mRightRearVehiclesUpdated = true;
-  mSituationData->mNeighbor->mRightRearVehicles.clear();
-  getRightRearVehicles( 2000.0f , mSituationData->mNeighbor->mRightRearVehicles );
-  return mSituationData->mNeighbor->mRightRearVehicles;
-}
-
-const std::vector< MTS_Vehicle* >& LocalizationStage::getLeftFrontVehicles()
-{
-  if( mSituationData->mNeighbor->mLeftFrontVehiclesUpdated )
-    return mSituationData->mNeighbor->mLeftFrontVehicles;
-
-  mSituationData->mNeighbor->mLeftFrontVehiclesUpdated = true;
-  mSituationData->mNeighbor->mLeftFrontVehicles.clear();
-  getLeftFrontVehicles( 2000.0f , mSituationData->mNeighbor->mLeftFrontVehicles );
-  return mSituationData->mNeighbor->mLeftFrontVehicles;
-}
-
-const std::vector< MTS_Vehicle* >& LocalizationStage::getRightFrontVehicles()
-{
-  if( mSituationData->mNeighbor->mRightFrontVehiclesUpdated )
-    return mSituationData->mNeighbor->mRightFrontVehicles;
-  mSituationData->mNeighbor->mRightFrontVehiclesUpdated = true;
-  mSituationData->mNeighbor->mRightFrontVehicles.clear();
-  getRightFrontVehicles( 2000.0f , mSituationData->mNeighbor->mRightFrontVehicles );
-  return mSituationData->mNeighbor->mRightFrontVehicles;
-}
-
-MTS_Vehicle* LocalizationStage::getLeftVehicle()
-{
-  if( mSituationData->mNeighbor->mLeftVehicle != this ) 
-    return mSituationData->mNeighbor->mLeftVehicle;
-
-  float minOffset = mOffset - mVehicleController->getLength() / 2.0f;
-  float maxOffset = mOffset + mVehicleController->getLength() / 2.0f;
-  MTS_Lane* lane = this->getLane();
-
-  if( lane == NULL ) return NULL;
-
-  MTS_Vehicle* leftVeh;
-
-  while(1)
-  {
-    // find the vehicle on my left and closest to me 
-    leftVeh = lane->getVehicle( this , minOffset , maxOffset , mLateralOffset , true );
-    lane = lane->getLeftLane(); // continue to consider the left of current lane
-
-    if( leftVeh != NULL || lane == NULL ) break;
-  } 
-
-  mSituationData->mNeighbor->mLeftVehicle = leftVeh;
-  return mSituationData->mNeighbor->mLeftVehicle;
-}
-
-MTS_Vehicle* LocalizationStage::getRightVehicle()
-{
-  if( mSituationData->mNeighbor->mRightVehicle != this ) 
-    return mSituationData->mNeighbor->mRightVehicle;
-  float minOffset = mOffset - mVehicleController->getLength() / 2.0f;
-  float maxOffset = mOffset + mVehicleController->getLength() / 2.0f;
-  MTS_Lane* lane = this->getLane();
-
-  if(lane==NULL) return NULL;
-
-  MTS_Vehicle* rightVeh;
-  
-  while(1)
-  {
-    rightVeh = lane->getVehicle( this , minOffset , maxOffset , mLateralOffset , false );
-    lane = lane->getRightLane(); // continue to consider the left of current lane
-
-    if( rightVeh != NULL || lane == NULL ) break;
-  }
-
-  mSituationData->mNeighbor->mRightVehicle = rightVeh; 
-  return mSituationData->mNeighbor->mRightVehicle;
-}
-
-void LocalizationStage::getLeftRearVehicles( float distance , std::vector< MTS_Vehicle* > &result )
-{
-  float halfVehLength = mCurrentController->getLength() / 2.0f;
-  float halfVehWidth = mCurrentController->getWidth() / 2.0f;
-  float vehOffset = mCurrentController->getOffset();
-  MTS_Lane *lane = mCurrentController->getLane();
-  MTS_Edge *edge = lane->getEdge();
-  int numLanes = edge->getLaneSize();
-  int indexRange = ceil( halfVehWidth / lane->getWidth() );
-  int startLaneIdx = lane->getIndex();
-  int targetLaneIdx = MIN( numLanes , startLaneIdx + indexRange ); 
-  float maxOffset = vehOffset;
-  float minOffset = maxOffset - distance;
-  std::vector< MTS_Vehicle* > tmpResult;
-
-  if( minOffset >= 0 || maxOffset >= 0 )
-  {
-    for( int i=startLaneIdx ; i<=targetLaneIdx ; ++i )
-    {
-      MTS_Lane *lane = edge->getLane( i );
-      lane->getVehicleInBlock( minOffset , maxOffset , tmpResult );
-    }
-  }
-
-  // check if the coming vehicle is safe for the subject 
-  // if the observing boundary is backward the start of lane
-  // add it to temporary result
-  if( minOffset < 0 || maxOffset < 0 )
-  {
-    for( int i=startLaneIdx ; i<=targetLaneIdx ; ++i )
-    {
-      MTS_Lane *lane = edge->getLane( i );
-      lane->getVehicleInComingQueue( minOffset , maxOffset , tmpResult );
-    }
-  }
-
-
-  for( int i=0 ; i < tmpResult.size() ; ++i )
-  {
-    if( tmpResult[i] == this ) continue;
-    MTS_VehicleController *controller = tmpResult[i]->getCurrentController();
-    const MTS_Edge *last = controller->bindEdge( edge );
-    if( !mCurrentController->cooperated( controller ) )
-      continue;
-
-    if( !mCurrentController->isOverlapped( tmpResult[i] ) && 
-      tmpResult[i]->getLateralSeparation( this ) < 0 ) 
-      result.push_back( tmpResult[i] );
-
-    tmpResult[i]->getCurrentController()->bindEdge( last );
-  }
-    
-}
-
-void LocalizationStage::getRightRearVehicles( float distance , std::vector< MTS_Vehicle* > &result )
-{
-  float halfVehLength = mCurrentController->getLength() / 2.0f;
-  float halfVehWidth = mCurrentController->getWidth() / 2.0f;
-  float vehOffset = mCurrentController->getOffset();
-  MTS_Lane *lane = mCurrentController->getLane();
-  MTS_Edge *edge = lane->getEdge();
-  int indexRange = ceil( halfVehWidth / lane->getWidth() );
-  int startLaneIdx = lane->getIndex();
-  int targetLaneIdx = MAX( 0 , startLaneIdx - indexRange ); 
-  float maxOffset = vehOffset;
-  float minOffset = maxOffset - distance;
-  std::vector< MTS_Vehicle* > tmpResult;
-
-  if( minOffset >= 0 || maxOffset >= 0 )
-  {
-    for( int i=startLaneIdx ; i>=targetLaneIdx ; --i )
-    {
-      MTS_Lane *lane = edge->getLane( i );
-      lane->getVehicleInBlock( minOffset , maxOffset , tmpResult );
-    }
-  }
-
-  // check if the coming vehicle is safe for the subject 
-  // if the observing boundary is backward the start of lane
-  // add it to temporary result
-  if( minOffset < 0 || maxOffset < 0 )
-  {
-    for( int i=startLaneIdx ; i>=targetLaneIdx ; --i )
-    {
-      MTS_Lane *lane = edge->getLane( i );
-      lane->getVehicleInComingQueue( minOffset , maxOffset , tmpResult );
-    }
-  }
-
-  for( int i=0 ; i < tmpResult.size() ; ++i )
-  {
-    if( tmpResult[i] == this ) continue;
-    MTS_VehicleController *controller = tmpResult[i]->getCurrentController();
-    const MTS_Edge *last = controller->bindEdge( edge );
-    if( !mCurrentController->cooperated( controller ) )
-      continue;
-
-    if( !mCurrentController->isOverlapped( tmpResult[i] ) && 
-      tmpResult[i]->getLateralSeparation( this ) > 0 ) 
-      result.push_back( tmpResult[i] );
-
-    tmpResult[i]->getCurrentController()->bindEdge( last );
-  }
-    
-}
-
-void LocalizationStage::getLeftFrontVehicles( float distance , std::vector< MTS_Vehicle* > &result )
-{
-  float halfVehLength = mCurrentController->getLength() / 2.0f;
-  float halfVehWidth = mCurrentController->getWidth() / 2.0f;
-  float vehOffset = mCurrentController->getOffset();
-  MTS_Lane *lane = mCurrentController->getLane();
-  MTS_Edge *edge = lane->getEdge();
-  float laneLength = lane->getLength();
-  
-  if( mTransitController->ready() ) laneLength = mTransitController->getEndOffset();
-
-  int numLanes = edge->getLaneSize();
-  int indexRange = ceil( halfVehWidth / lane->getWidth() );
-  int startLaneIdx = lane->getIndex();
-  int targetLaneIdx = MIN( numLanes , startLaneIdx + indexRange ); 
-  float minOffset = vehOffset;
-  float maxOffset = minOffset + distance;
-  std::vector< MTS_Vehicle* > tmpResult;
-
-  if( minOffset >=0 || maxOffset >= 0 )
-  {
-    for( int i=startLaneIdx ; i<=targetLaneIdx ; ++i )
-    {
-      MTS_Lane *lane = edge->getLane( i );
-      lane->getVehicleInBlock( minOffset , maxOffset , tmpResult );
-    }
-  }
-
-  if( minOffset < 0 || maxOffset < 0 )
-  {
-    for( int i=startLaneIdx ; i<=targetLaneIdx ; ++i )
-    {
-      MTS_Lane *lane = edge->getLane( i );
-      lane->getVehicleInComingQueue( minOffset , maxOffset , tmpResult );
-    }
-  }
-  // check if the coming vehicle is safe for the subject 
-  // if the observing boundary is backward the start of lane
-  // add it to temporary result
-
-  MTS_Edge *nextEdge = NULL;
-  MTS_Lane *nextLane = getNextLane();
-  if( nextLane ) nextEdge = nextLane->getEdge();
-  if( nextLane != lane && nextEdge && ( minOffset > laneLength || maxOffset > laneLength ) ) 
-  {
-    minOffset -= laneLength;
-    maxOffset -= laneLength;
-    for( int i=startLaneIdx ; i<=targetLaneIdx ; ++i )
-    {
-      MTS_Lane *lane = nextEdge->getLane( i );
-      lane->getVehicleInBlock( minOffset , maxOffset , tmpResult );
-    }
-  }
-
-
-  for( int i=0 ; i < tmpResult.size() ; ++i )
-  {
-    if( tmpResult[i] == this ) continue;
-    MTS_VehicleController *controller = tmpResult[i]->getCurrentController();
-    const MTS_Edge *last = controller->bindEdge( edge );
-    if( !mCurrentController->cooperated( controller ) )
-      continue;
-    
-    // �`�N: The other vehicles could be on the left-front and on the left-rear at the same time. 
-    //           Bacause the restriction  for rear vehicles is looser, so one vehicle will be regarded as the front vehicle 
-    //           if it only belong to the front vehicles.
-    bool totallyFront = controller->getOffset() - controller->getLength() / 2.0f > minOffset;
-    if( totallyFront == false )
-      int a=0;
-    if( !mCurrentController->isOverlapped( tmpResult[i] ) &&
-      tmpResult[i]->getLateralSeparation( this ) < 0 ) 
-      result.push_back( tmpResult[i] );
-
-    tmpResult[i]->getCurrentController()->bindEdge( last );
-  }
-    
-}
-
-void LocalizationStage::getRightFrontVehicles( float distance , std::vector< MTS_Vehicle* > &result )
-{
-  float halfVehLength = mCurrentController->getLength() / 2.0f;
-  float halfVehWidth = mCurrentController->getWidth() / 2.0f;
-  float vehOffset = mCurrentController->getOffset();
-  MTS_Lane *lane = mCurrentController->getLane();
-  MTS_Edge *edge = lane->getEdge();
-  float laneLength = lane->getLength();
-  
-  if( mTransitController->ready() ) laneLength = mTransitController->getEndOffset();
-
-  int indexRange = ceil( halfVehWidth / lane->getWidth() );
-  int startLaneIdx = lane->getIndex();
-  int targetLaneIdx = MAX( 0 , startLaneIdx - indexRange ); 
-  float minOffset = vehOffset;
-  float maxOffset = minOffset + distance;
-  std::vector< MTS_Vehicle* > tmpResult;
-
-  if( minOffset >=0 || maxOffset >= 0 )
-  {
-    for( int i=startLaneIdx ; i>=targetLaneIdx ; --i )
-    {
-      MTS_Lane *lane = edge->getLane( i );
-      lane->getVehicleInBlock( minOffset , maxOffset , tmpResult );
-    }
-  }
-
-  if( minOffset < 0 || maxOffset < 0 )
-  {
-    for( int i=startLaneIdx ; i>=targetLaneIdx ; --i )
-    {
-      MTS_Lane *lane = edge->getLane( i );
-      lane->getVehicleInComingQueue( minOffset , maxOffset , tmpResult );
-    }
-  }
-
-  // check if the coming vehicle is safe for the subject 
-  // if the observing boundary is backward the start of lane
-  // add it to temporary result
-
-  MTS_Edge *nextEdge = NULL;
-  MTS_Lane *nextLane = getNextLane();
-  if( nextLane ) nextEdge = nextLane->getEdge();
-  if( nextLane != lane && nextEdge && ( minOffset > laneLength || maxOffset > laneLength ) ) 
-  {
-    minOffset -= laneLength;
-    maxOffset -= laneLength;
-    for( int i=startLaneIdx ; i>=targetLaneIdx ; --i )
-    {
-      MTS_Lane *lane = nextEdge->getLane( i );
-      lane->getVehicleInBlock( minOffset , maxOffset , tmpResult );
-    }
-  }
-
-
-  for( int i=0 ; i < tmpResult.size() ; ++i )
-  {
-    if( tmpResult[i] == this ) continue;
-    MTS_VehicleController *controller = tmpResult[i]->getCurrentController();
-    const MTS_Edge *last = controller->bindEdge( edge );
-    if( !mCurrentController->cooperated( controller ) )
-      continue;
-
-    //  �`�N: The other vehicles could be on the right-front and on the right-rear at the same time. 
-    //           Bacause the restriction  for rear vehicles is looser, so one vehicle will be regarded as the front vehicle 
-    //           if it only belong to the front vehicles. 
-    bool totallyFront = controller->getOffset() - controller->getLength() / 2.0f > minOffset;
-    if( totallyFront == false )
-      int a=0;
-
-    if( !mCurrentController->isOverlapped( tmpResult[i] )  &&
-      tmpResult[i]->getLateralSeparation( this ) > 0 ) 
-      result.push_back( tmpResult[i] );
-
-    tmpResult[i]->getCurrentController()->bindEdge( last );
-  }
-    
-}
-
 */
 // tool
 bool LocalizationStage::isOverlapped(ActorId actor_id, ActorId target_id, float target_location_y) const
@@ -1536,6 +1243,7 @@ bool LocalizationStage::isOverlapped(ActorId actor_id, ActorId target_id, float 
   }
   return true;
 }
+
 /*
 void LocalizationStage::getVehicleInBlock( float minOffset , float maxOffset , std::vector<MTS_Vehicle*> &result ) const
 {
@@ -1613,6 +1321,39 @@ float MTS_VehicleController::getExtendedDistance( float lateralOffset ) const
 */
 
 // transform
+std::array<float, 4> LocalizationStage::GlobalToLocal(ActorId actor_id, cg::Location location)
+{
+  cg::Location actor_location = simulation_state.GetLocation(actor_id);
+  cg::Rotation actor_rotation = simulation_state.GetRotation(actor_id);
+  cg::Transform transform(actor_location, actor_rotation);
+  std::array<float, 16> M_inv = transform.GetInverseMatrix(); // world to local
+  std::array<float, 4> global_location = {location.x, location.y, location.z, 1.0f};
+  
+  return matrixMultiply(M_inv, global_location);
+}
+
+/*
+std::array<float, 4> LocalizationStage::LocalToGlobal(ActorId actor_id, cg::Location local_location)
+{
+  cg::Location actor_location = simulation_state.GetLocation(actor_id);
+  cg::Rotation actor_rotation = simulation_state.GetRotation(actor_id);
+  cg::Transform transform(actor_location, actor_rotation);
+  std::array<float, 16> M = transform.GetMatrix(); // local to world
+  return matrixMultiply(M, local_location);
+}
+*/
+std::array<float, 4> LocalizationStage::matrixMultiply(std::array<float, 16> M, std::array<float, 4> V)
+{
+  std::array<float, 4> result;
+  
+  for(size_t i=0; i < V.size(); i++ ){ // should check column or row major
+    result[i]= M[4*i] * V[0] + M[4*i+1] * V[1] + M[4*i+2] * V[2] + M[4*i+3] * V[3];
+  }
+
+  return result;
+}
+
+/*
 std::vector<std::vector<float>> LocalizationStage::getMatrix(cg::Location actor_location, cg::Rotation actor_rotation) //local transfer to global
 {
   const float pi = acosf(-1);
@@ -1709,8 +1450,7 @@ void LocalizationStage::getCofactor(std::vector<std::vector<float>> A, std::vect
     } 
 } 
   
-/* Recursive function for finding determinant of matrix. 
-   n is current dimension of A[][]. */
+
 float LocalizationStage::determinant(std::vector<std::vector<float>> A, unsigned n) 
 { 
     float D = 0.0f; // Initialize result 
@@ -1791,7 +1531,7 @@ std::vector<std::vector<float>> LocalizationStage::inverse(std::vector<std::vect
 
   return inverse; 
 } 
-
+*/
 
 } // namespace traffic_manager
 } // namespace carla

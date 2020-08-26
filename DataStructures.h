@@ -34,15 +34,23 @@ using TimeInstance = chr::time_point<chr::system_clock, chr::nanoseconds>;
 using TLS = carla::rpc::TrafficLightState;
 
 struct MTS_Leader{
-  ActorId main_leader;
-  ActorId potential_leader;
-  ActorId pre_main_leader;
-  ActorId pre_potential_leader;
+  boost::optional<ActorId> main_leader;
+  boost::optional<ActorId> potential_leader;
+  boost::optional<ActorId> pre_main_leader;
+  boost::optional<ActorId> pre_potential_leader;
 };
 
 struct MTS_Neighbor{
   bool updated;
   std::vector< ActorId > vehicles;
+};
+
+enum class Direction : short
+{
+  LEFTREAR,
+  LEFTFRONT,
+  RIGHTREAR,
+  RIGHTFRONT
 };
 
 struct MTS_Surrounding
@@ -54,15 +62,16 @@ struct MTS_Surrounding
     // MTS_Vehicle* prevFirstLeader;
     // MTS_Vehicle* prevSecondLeader;
 
-    std::unordered_map<int, MTS_Neighbor*> neighbor;
+    // std::unordered_map<Direction, MTS_Neighbor*> neighbor;
+    std::unordered_map<Direction, std::shared_ptr<MTS_Neighbor>> neighbor;
 
     // std::vector< std::pair< MTS_Vehicle*,float > > mNeighbor;
     // std::vector< MTS_Vehicle* > mLeftRearVehicles;
     // std::vector< MTS_Vehicle* > mLeftFrontVehicles;
     // std::vector< MTS_Vehicle* > mRightRearVehicles;
     // std::vector< MTS_Vehicle* > mRightFrontVehicles;
-    ActorId mLeftVehicle;
-    ActorId mRightVehicle;
+    boost::optional<ActorId> LeftVehicle;
+    boost::optional<ActorId> RightVehicle;
     // bool mLeftRearVehiclesUpdated;
     // bool mLeftFrontVehiclesUpdated;
     // bool mRightRearVehiclesUpdated;

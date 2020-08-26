@@ -70,16 +70,22 @@ public:
   void Reset() override;
 
   void DrawLeader(ActorId actor_id, LocalizationData &output);
-  void updateLeader(const unsigned long index);
-  std::pair<ActorId, ActorId> collectLeadingVehicle(const unsigned long index);
+
+  void UpdateLeader(const unsigned long index);
+
+  void UpdateNeighbor(const unsigned long index);
+
+  void GetLeftVehicle(const unsigned long index);
+
+  void GetRightVehicle(const unsigned long index);
+
+  void GetSurroundVehicle(const unsigned long index);
+
   bool isOverlapped(ActorId actor_id, ActorId target_id, float target_location_y) const;
-  std::vector<std::vector<float>> getMatrix(cg::Location actor_location, cg::Rotation actor_rotation);//local transfer to global
-  std::vector<float> GlobalToLocal(std::vector<std::vector<float>> M, cg::Location global_location);
-  void matrixMultiply(std::vector<std::vector<float>> M, std::vector<float> V, std::vector<float> result);
-  void getCofactor(std::vector<std::vector<float>> A, std::vector<std::vector<float>> temp, unsigned p, unsigned q, unsigned n);
-  float determinant(std::vector<std::vector<float>> A, unsigned n);
-  void adjoint(std::vector<std::vector<float>> A,std::vector<std::vector<float>> adj);
-  std::vector<std::vector<float>> inverse(std::vector<std::vector<float>> A);
+  
+  std::array<float, 4> GlobalToLocal(ActorId actor_id, cg::Location global_location);
+
+  std::array<float, 4> matrixMultiply(std::array<float, 16> M, std::array<float, 4>  V);
 
 };
 

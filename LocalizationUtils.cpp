@@ -32,6 +32,18 @@ float DeviationDotProduct(const cg::Location &reference_location,
   return dot_product;
 }
 
+float VectorDotProduct(const cg::Vector3D &heading_vector, 
+                       const cg::Vector3D &target_vector) {
+  cg::Vector3D next_vector = target_vector;
+  float vector_magnitude_epsilon = 2.0f * std::numeric_limits<float>::epsilon();
+  next_vector.z = 0.0f;
+  next_vector = next_vector.MakeSafeUnitVector(vector_magnitude_epsilon);
+  cg::Vector3D heading_vector_flat(heading_vector.x, heading_vector.y, 0);
+  heading_vector_flat = heading_vector_flat.MakeSafeUnitVector(vector_magnitude_epsilon);
+  const float dot_product = cg::Math::Dot(next_vector, heading_vector_flat);
+  return dot_product;
+}
+
 void PushWaypoint(ActorId actor_id, TrackTraffic &track_traffic,
                   Buffer &buffer, SimpleWaypointPtr &waypoint) {
 
