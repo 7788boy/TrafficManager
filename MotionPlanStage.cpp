@@ -10,7 +10,10 @@ namespace traffic_manager {
 using namespace constants::MotionPlan;
 using namespace constants::WaypointSelection;
 using namespace constants::SpeedThreshold;
+<<<<<<< HEAD
 using namespace constants::MTSCar;
+=======
+>>>>>>> a6bf17c700482e03ea7664a04d595d2792ffea16
 
 using constants::HybridMode::HYBRID_MODE_DT;
 
@@ -246,6 +249,7 @@ std::pair<bool, float> MotionPlanStage::CollisionHandling(const CollisionHazardD
 
     const float other_speed_along_heading = cg::Math::Dot(other_velocity, ego_heading);
 
+<<<<<<< HEAD
     //dynamic_target_velocity = GetLongitudinalAcc(ego_velocity.Length(), tl_hazard, float desired_velocity, other_velocity.Length(), float gap);
     // Consider collision avoidance decisions only if there is positive relative velocity of the ego vehicle (meaning, ego vehicle is closing the gap to the lead vehicle).
     if (ego_relative_speed > EPSILON_RELATIVE_SPEED) {
@@ -256,6 +260,21 @@ std::pair<bool, float> MotionPlanStage::CollisionHandling(const CollisionHazardD
         dynamic_target_velocity = other_speed_along_heading + RELATIVE_APPROACH_SPEED;
       }
       // If vehicle is approaching a lead vehicle and the lead vehicle is further than CRITICAL_BRAKING_MARGIN but closer than FOLLOW_LEAD_DISTANCE.
+=======
+    // Consider collision avoidance decisions only if there is positive relative velocity
+    // of the ego vehicle (meaning, ego vehicle is closing the gap to the lead vehicle).
+    if (ego_relative_speed > EPSILON_RELATIVE_SPEED) {
+      // If other vehicle is approaching lead vehicle and lead vehicle is further
+      // than follow_lead_distance 0 kmph -> 5m, 100 kmph -> 10m.
+      float follow_lead_distance = ego_relative_speed * FOLLOW_DISTANCE_RATE + MIN_FOLLOW_LEAD_DISTANCE;
+      if (available_distance_margin > follow_lead_distance) {
+        // Then reduce the gap between the vehicles till FOLLOW_LEAD_DISTANCE
+        // by maintaining a relative speed of RELATIVE_APPROACH_SPEED
+        dynamic_target_velocity = other_speed_along_heading + RELATIVE_APPROACH_SPEED;
+      }
+      // If vehicle is approaching a lead vehicle and the lead vehicle is further
+      // than CRITICAL_BRAKING_MARGIN but closer than FOLLOW_LEAD_DISTANCE.
+>>>>>>> a6bf17c700482e03ea7664a04d595d2792ffea16
       else if (available_distance_margin > CRITICAL_BRAKING_MARGIN) {
         // Then follow the lead vehicle by acquiring it's speed along current heading.
         dynamic_target_velocity = std::max(other_speed_along_heading, RELATIVE_APPROACH_SPEED);
@@ -284,6 +303,7 @@ void MotionPlanStage::Reset() {
   teleportation_instance.clear();
 }
 
+<<<<<<< HEAD
 // // Longitudinal
 // float MotionPlannerStage::GetLongitudinalAcc(float current_velocity, bool traffic_light_hazard, float desired_velocity, float object_velocity, float gap) 
 // {
@@ -956,5 +976,7 @@ void MotionPlanStage::Reset() {
 // }
 
 
+=======
+>>>>>>> a6bf17c700482e03ea7664a04d595d2792ffea16
 } // namespace traffic_manager
 } // namespace carla
