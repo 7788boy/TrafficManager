@@ -167,17 +167,18 @@ void LocalizationStage::Update(const unsigned long index) {
 
   ExtendAndFindSafeSpace(actor_id, is_at_junction_entrance, waypoint_buffer);
 
+  /*MTS CALL*/
   UpdateLeader(index);
-  UpdateNeighbor(index);
+  //UpdateNeighbor(index);
   
   // Editing output array
   LocalizationData &output = output_array.at(index);
   output.is_at_junction_entrance = is_at_junction_entrance;
 
-  // if (actor_id == vehicle_id_list.at(0))
-  // {
-  //   DrawLeader(actor_id, output);
-  // }
+  if (actor_id == vehicle_id_list.at(0))
+  {
+    DrawLeader(actor_id, output);
+  }
 
   if (is_at_junction_entrance) {
     const SimpleWaypointPair &safe_space_end_points = vehicles_at_junction_entrance.at(actor_id);
@@ -415,34 +416,33 @@ void LocalizationStage::DrawBuffer(Buffer &buffer) {
 
 void LocalizationStage::DrawLeader(ActorId actor_id, LocalizationData &output) {
   cg::Location actor_location = simulation_state.GetLocation(actor_id);
-  debug_helper.DrawPoint(actor_location, 1.0f, {255u, 0u, 0u}, 0.5, true);
+  actor_location.z += 3.0f; 
+  cc::DebugHelper::Color color_ego {255u, 0u, 0u};
+  cc::DebugHelper::Color color_main_leader {0u, 255u, 0u};
+  cc::DebugHelper::Color color_potential_leader {0u, 0u, 255u};
+  
+  debug_helper.DrawPoint(actor_location, 1.0f, color_ego, 0.1, true);
   
   if(output.leader.main_leader)
   {
     cg::Location first_location = simulation_state.GetLocation(output.leader.main_leader.get());
-    debug_helper.DrawPoint(first_location, 1.0f, {0u, 255u, 0u}, 0.5, true);
+    first_location.z += 3.0f;
+    debug_helper.DrawPoint(first_location, 1.0f, color_main_leader, 0.1, true);
     }
 
   if(output.leader.potential_leader)
   { 
     cg::Location second_location = simulation_state.GetLocation(output.leader.potential_leader.get());
-    debug_helper.DrawPoint(second_location, 1.0f, {0u, 0u, 255u}, 0.5, true);
+    second_location.z += 3.0f;
+    debug_helper.DrawPoint(second_location, 1.0f, color_potential_leader, 0.1, true);
   }
 }
 
+/************************
+*******MTS SECTION*******
+************************/
+
 // Leader
-/*
-void LocalizationStage::updateLeader(const unsigned long index)
-{
-  //LocalizationData &output = output_array.at(index);
-
-  // first = main leader, second = potential leader.
-  std::pair<std::optional<ActorId>, std::optional<ActorId>> leaders = collectLeadingVehicle(index); 
-  output.leader.main_leader = leaders.first;
-  output.leader.potential_leader = leaders.second;
-}
-*/
-
 void LocalizationStage::UpdateLeader(const unsigned long index)
 {
   const ActorId actor_id = vehicle_id_list.at(index);
@@ -496,7 +496,7 @@ void LocalizationStage::UpdateLeader(const unsigned long index)
       float target_offset = target_local_location[0] - target_length; 
       bool blocked = isOverlapped(actor_id, target_id, target_local_location[1]);
 
-      if( target_offset > 0.0f && blocked ); //target_offset < passOffset && blocked ) 
+      if( target_offset > 0.0f && blocked ) //target_offset < passOffset && blocked ) 
       {
         expectedPreVeh = passedPreVeh;
         passedPreVeh = target_id;
@@ -647,7 +647,160 @@ void LocalizationStage::GetSurroundVehicle(const unsigned long index)
     }
   }
 }
-/*
+
+// tool
+bool LocalizationStage::isOverlapped(ActorId actor_id, ActorId target_id, float target_location_y) const
+{
+  //don't need to worry about that while go straight forward.
+  //float test = mSubject->getOrientation().dotProduct( veh->getOrientation() );
+  //if( test  >= 0.8f ) 
+  //	return mSubject->getLane()->isLateralOverlapping( mSubject , veh );
+
+  //float myWidth = simulate mSubject->mType->getStaticWidth();
+  //float vehWidth = veh->getCurrentController()->getPsychoWidth( mSubject->getCurrentSpeed() );
+  //float width_sum =  vehWidth + myWidth;
+
+  float actor_width = simulation_state.GetDimensions(actor_id).y;// controller->getLength();
+  // float actor_location_y = simulation_state.GetLocation(actor_id).y;
+  // //float actor_velocity_y = simulation_state.GetVelocity(actor_id).y;
+  float target_width = simulation_state.GetDimensions(target_id).y;// controller->getLength();
+  // float target_location_y = simulation_state.GetLocation(target_id).y;
+  //float target_velocity_y = simulation_state.GetVelocity(target_id).y;
+
+  float width_sum =  actor_width + target_width;
+  //float myOffset_lat = getLateralOffset();
+
+  //float vehOffset_lat = veh->getCurrentController()->getLateralOffset();
+  //float x_dis = ABS( myOffset_lat - vehOffset_lat );
+
+  //float x_dis = mSubject->getLateralSeparation( veh );
+  
+  float y_dis = std::abs(target_location_y);
+
+  if( 2.0f * y_dis >= width_sum )
+  {
+    //if(  ABS(mSubject->getLateralSeparation( veh , 0.25f)) < width_sum/2.0f )
+    //	return true;
+    return false;
+  }
+  return true;
+}
+
+// transform
+std::array<float, 4> LocalizationStage::GlobalToLocal(ActorId actor_id, cg::Location location)
+{
+  cg::Location actor_location = simulation_state.GetLocation(actor_id);
+  cg::Rotation actor_rotation = simulation_state.GetRotation(actor_id);
+  cg::Transform transform(actor_location, actor_rotation);
+  std::array<float, 16> M_inv = transform.GetInverseMatrix(); // world to local
+  std::array<float, 4> global_location = {location.x, location.y, location.z, 1.0f};
+  
+  return matrixMultiply(M_inv, global_location);
+}
+
+std::array<float, 4> LocalizationStage::matrixMultiply(std::array<float, 16> M, std::array<float, 4> V)
+{
+  std::array<float, 4> result;
+  
+  for(size_t i=0; i < V.size(); i++ ){ // should check column or row major
+    result[i]= M[4*i] * V[0] + M[4*i+1] * V[1] + M[4*i+2] * V[2] + M[4*i+3] * V[3];
+  }
+
+  return result;
+}
+
+
+/*******Transform Part*******/
+/****Unused Function START****
+std::array<float, 4> LocalizationStage::LocalToGlobal(ActorId actor_id, cg::Location local_location)
+{
+  cg::Location actor_location = simulation_state.GetLocation(actor_id);
+  cg::Rotation actor_rotation = simulation_state.GetRotation(actor_id);
+  cg::Transform transform(actor_location, actor_rotation);
+  std::array<float, 16> M = transform.GetMatrix(); // local to world
+  return matrixMultiply(M, local_location);
+}
+******Unused Function END*****/
+
+/******Find Leader Part******/
+/****Unused Function START****
+void LocalizationStage::getVehicleInBlock( float minOffset , float maxOffset , std::vector<MTS_Vehicle*> &result ) const
+{
+  std::deque<MTS_Vehicle*>::const_iterator it = mVehicles.begin();
+  
+  float block_middle = (minOffset+maxOffset)/2.0f;
+  float block_len = maxOffset - block_middle;
+  const float MAXLEN = 120.0f;
+
+  for( ; it!=mVehicles.end() ; ++it )
+  {
+    if ( !(*it)->getActive() ) continue;
+    MTS_VehicleController *controller = (*it)->getCurrentController();
+    const MTS_Edge *last = controller->bindEdge( mEdge );
+    float halfVehLen = controller->getLength() / 2.0f;
+    float vehOffset = controller->getOffset();
+    float dis_long = ABS( (block_middle-vehOffset) );
+    controller->bindEdge( last );
+    if( dis_long < block_len + halfVehLen )
+    {
+      result.push_back( *it );
+    }
+  //	else if( block_middle-vehOffset > MAXLEN + block_len )
+  //		break;
+    
+  }
+}
+
+float LocalizationStage::getExtendedGap( const MTS_Vehicle *pred ) const
+{
+  MTS_VehicleController *controller = pred->getCurrentController();
+
+  if( controller->getYawAngle() == 0.0f )
+    return 0.0f;
+
+  float sepLatOffset = controller->getSeparationLateralOffset();
+  float myLatOffset = getLateralOffset();
+
+  float predHalfWidth = pred->getCurrentController()->getPsychoWidth( mSubject->getCurrentSpeed() ) / 2.0f;
+  float myHalfWidth = mSubject->mType->getStaticWidth() / 2.0f;
+  float latSeparation = mSubject->getLateralSeparation( pred );
+  latSeparation = ABS( latSeparation );
+  if( latSeparation > predHalfWidth + myHalfWidth )
+    return 0.0f;
+
+  float myLeftLatOffset = myLatOffset - myHalfWidth;
+  float myRightLatOffset = myLatOffset + myHalfWidth;
+  float extendedGap = 0.0f;
+  
+  if( myLeftLatOffset > sepLatOffset )
+    extendedGap = controller->getExtendedDistance( myLeftLatOffset );
+  else if( myRightLatOffset < sepLatOffset )
+    extendedGap = controller->getExtendedDistance( myRightLatOffset );
+
+  return extendedGap;
+}
+
+float MTS_VehicleController::getExtendedDistance( float lateralOffset ) const
+{
+  float dis = 0.0f;
+  if( lateralOffset > mGapVariable.SeparationLateralOffset )
+  {
+    float ratio = ( lateralOffset - mGapVariable.SeparationLateralOffset ) / mGapVariable.RightWidth;
+    ratio = MIN( 1.0f , ratio );
+    dis = mGapVariable.MaxRightGap * ratio;
+  }
+  else
+  {
+    float ratio = ( mGapVariable.SeparationLateralOffset  -  lateralOffset ) / mGapVariable.LeftWidth;
+    ratio = MIN( 1.0f , ratio );
+    dis = mGapVariable.MaxLeftGap * ratio;
+  }
+  return dis;
+}
+******Unused Function END******/
+
+/******Find Region Part******/
+/****Unused Function START****
 // Situation
 void LocalizationStage::updateRegion()
 {
@@ -690,6 +843,10 @@ void LocalizationStage::updateRegion()
   mLane = mSubject->getLane();
   mEdge = mSubject->getLane()->getEdge();
 }
+****Unused Function END****/
+
+/******Check Safety Part******/
+/****Unused Function START****
 
 void LocalizationStage::evaluateSafety()
 {
@@ -913,6 +1070,7 @@ bool LocalizationStage::_checkSafety( MTS_Vehicle *subject , MTS_Vehicle *object
   return false;
 }
 
+//Should be region part 
 void LocalizationStage::_updateBaseRegion( const MTS_Vehicle *veh , const MTS_Lane *lane )
 {
   MTS_Vehicle *pred = veh->getPassedLeadingVehicle();
@@ -935,6 +1093,7 @@ void LocalizationStage::_updateBaseRegion( const MTS_Vehicle *veh , const MTS_La
   mCurrentRegion.maxPassingSpeed = maxSpeed;
 }
 
+//Should be region part 
 void LocalizationStage::_updateBaseRegion( const MTS_Vehicle *veh , const MTS_Vehicle *leftVeh , const MTS_Vehicle *rightVeh )
 {
   MTS_Vehicle *pred = veh->getPassedLeadingVehicle();
@@ -976,6 +1135,7 @@ void LocalizationStage::_updateBaseRegion( const MTS_Vehicle *veh , const MTS_Ve
   mCurrentRegion.maxPassingSpeed = maxSpeed;
 }
 
+//Should be region part 
 void LocalizationStage::_findSpace(  MTS_Vehicle *veh , MTS_Vehicle *pred , std::vector< MTS_Region > &result )
 {
   std::vector<MTS_Region> candidateSpace;
@@ -1045,6 +1205,7 @@ void LocalizationStage::_findSpace(  MTS_Vehicle *veh , MTS_Vehicle *pred , std:
   }
 }
 
+//Should be region part 
 void LocalizationStage::_findLane( const MTS_Vehicle *veh , std::vector< MTS_Region > &result )
 {
   MTS_Region spaceData;
@@ -1205,333 +1366,8 @@ void LocalizationStage::_findGapAndSpeed( const MTS_Vehicle *veh , float minLate
     region.maxPassingSpeed = veh->getLane()->getMaxPassingSpeed();
   }
 }
-*/
-// tool
-bool LocalizationStage::isOverlapped(ActorId actor_id, ActorId target_id, float target_location_y) const
-{
-  //don't need to worry about that while go straight forward.
-  //float test = mSubject->getOrientation().dotProduct( veh->getOrientation() );
-  //if( test  >= 0.8f ) 
-  //	return mSubject->getLane()->isLateralOverlapping( mSubject , veh );
+****Unused Function END****/
 
-  //float myWidth = simulate mSubject->mType->getStaticWidth();
-  //float vehWidth = veh->getCurrentController()->getPsychoWidth( mSubject->getCurrentSpeed() );
-  //float width_sum =  vehWidth + myWidth;
-
-  float actor_width = simulation_state.GetDimensions(actor_id).y;// controller->getLength();
-  // float actor_location_y = simulation_state.GetLocation(actor_id).y;
-  // //float actor_velocity_y = simulation_state.GetVelocity(actor_id).y;
-  float target_width = simulation_state.GetDimensions(target_id).y;// controller->getLength();
-  // float target_location_y = simulation_state.GetLocation(target_id).y;
-  //float target_velocity_y = simulation_state.GetVelocity(target_id).y;
-
-  float width_sum =  actor_width + target_width;
-  //float myOffset_lat = getLateralOffset();
-
-  //float vehOffset_lat = veh->getCurrentController()->getLateralOffset();
-  //float x_dis = ABS( myOffset_lat - vehOffset_lat );
-
-  //float x_dis = mSubject->getLateralSeparation( veh );
-  
-  float y_dis = std::abs(target_location_y);
-
-  if( 2.0f * y_dis >= width_sum )
-  {
-    //if(  ABS(mSubject->getLateralSeparation( veh , 0.25f)) < width_sum/2.0f )
-    //	return true;
-    return false;
-  }
-  return true;
-}
-
-/*
-void LocalizationStage::getVehicleInBlock( float minOffset , float maxOffset , std::vector<MTS_Vehicle*> &result ) const
-{
-  std::deque<MTS_Vehicle*>::const_iterator it = mVehicles.begin();
-  
-  float block_middle = (minOffset+maxOffset)/2.0f;
-  float block_len = maxOffset - block_middle;
-  const float MAXLEN = 120.0f;
-
-  for( ; it!=mVehicles.end() ; ++it )
-  {
-    if ( !(*it)->getActive() ) continue;
-    MTS_VehicleController *controller = (*it)->getCurrentController();
-    const MTS_Edge *last = controller->bindEdge( mEdge );
-    float halfVehLen = controller->getLength() / 2.0f;
-    float vehOffset = controller->getOffset();
-    float dis_long = ABS( (block_middle-vehOffset) );
-    controller->bindEdge( last );
-    if( dis_long < block_len + halfVehLen )
-    {
-      result.push_back( *it );
-    }
-  //	else if( block_middle-vehOffset > MAXLEN + block_len )
-  //		break;
-    
-  }
-}
-
-float LocalizationStage::getExtendedGap( const MTS_Vehicle *pred ) const
-{
-  MTS_VehicleController *controller = pred->getCurrentController();
-
-  if( controller->getYawAngle() == 0.0f )
-    return 0.0f;
-
-  float sepLatOffset = controller->getSeparationLateralOffset();
-  float myLatOffset = getLateralOffset();
-
-  float predHalfWidth = pred->getCurrentController()->getPsychoWidth( mSubject->getCurrentSpeed() ) / 2.0f;
-  float myHalfWidth = mSubject->mType->getStaticWidth() / 2.0f;
-  float latSeparation = mSubject->getLateralSeparation( pred );
-  latSeparation = ABS( latSeparation );
-  if( latSeparation > predHalfWidth + myHalfWidth )
-    return 0.0f;
-
-  float myLeftLatOffset = myLatOffset - myHalfWidth;
-  float myRightLatOffset = myLatOffset + myHalfWidth;
-  float extendedGap = 0.0f;
-  
-  if( myLeftLatOffset > sepLatOffset )
-    extendedGap = controller->getExtendedDistance( myLeftLatOffset );
-  else if( myRightLatOffset < sepLatOffset )
-    extendedGap = controller->getExtendedDistance( myRightLatOffset );
-
-  return extendedGap;
-}
-
-float MTS_VehicleController::getExtendedDistance( float lateralOffset ) const
-{
-  float dis = 0.0f;
-  if( lateralOffset > mGapVariable.SeparationLateralOffset )
-  {
-    float ratio = ( lateralOffset - mGapVariable.SeparationLateralOffset ) / mGapVariable.RightWidth;
-    ratio = MIN( 1.0f , ratio );
-    dis = mGapVariable.MaxRightGap * ratio;
-  }
-  else
-  {
-    float ratio = ( mGapVariable.SeparationLateralOffset  -  lateralOffset ) / mGapVariable.LeftWidth;
-    ratio = MIN( 1.0f , ratio );
-    dis = mGapVariable.MaxLeftGap * ratio;
-  }
-  return dis;
-}
-*/
-
-// transform
-std::array<float, 4> LocalizationStage::GlobalToLocal(ActorId actor_id, cg::Location location)
-{
-  cg::Location actor_location = simulation_state.GetLocation(actor_id);
-  cg::Rotation actor_rotation = simulation_state.GetRotation(actor_id);
-  cg::Transform transform(actor_location, actor_rotation);
-  std::array<float, 16> M_inv = transform.GetInverseMatrix(); // world to local
-  std::array<float, 4> global_location = {location.x, location.y, location.z, 1.0f};
-  
-  return matrixMultiply(M_inv, global_location);
-}
-
-/*
-std::array<float, 4> LocalizationStage::LocalToGlobal(ActorId actor_id, cg::Location local_location)
-{
-  cg::Location actor_location = simulation_state.GetLocation(actor_id);
-  cg::Rotation actor_rotation = simulation_state.GetRotation(actor_id);
-  cg::Transform transform(actor_location, actor_rotation);
-  std::array<float, 16> M = transform.GetMatrix(); // local to world
-  return matrixMultiply(M, local_location);
-}
-*/
-std::array<float, 4> LocalizationStage::matrixMultiply(std::array<float, 16> M, std::array<float, 4> V)
-{
-  std::array<float, 4> result;
-  
-  for(size_t i=0; i < V.size(); i++ ){ // should check column or row major
-    result[i]= M[4*i] * V[0] + M[4*i+1] * V[1] + M[4*i+2] * V[2] + M[4*i+3] * V[3];
-  }
-
-  return result;
-}
-
-/*
-std::vector<std::vector<float>> LocalizationStage::getMatrix(cg::Location actor_location, cg::Rotation actor_rotation) //local transfer to global
-{
-  const float pi = acosf(-1);
-  
-  float c_y = cosf(actor_rotation.yaw * pi / 180.0f);
-  float s_y = sinf(actor_rotation.yaw * pi / 180.0f);
-  float c_r = cosf(actor_rotation.roll * pi / 180.0f);
-  float s_r = sinf(actor_rotation.roll * pi / 180.0f);
-  float c_p = cosf(actor_rotation.pitch * pi / 180.0f);
-  float s_p = sinf(actor_rotation.pitch * pi / 180.0f);
-
-  std::vector<std::vector<float>> M;
-  M.resize(4, std::vector<float>(4, 0.0f));
-  //std::vector<std::vector<float>>  M[4][4]; //matrix =  //np.array(np.identity(4))
-  M[3][0] = 0.0f;
-  M[3][1] = 0.0f;
-  M[3][2] = 0.0f;
-  M[3][3] = 1.0f;
-  M[0][3] = actor_location.x;
-  M[1][3] = actor_location.y;
-  M[2][3] = actor_location.z;
-  M[0][0] = c_p * c_y;
-  M[0][1] = c_y * s_p * s_r - s_y * c_r;
-  M[0][2] = -c_y * s_p * c_r - s_y * s_r;
-  M[1][0] = s_y * c_p;
-  M[1][1] = s_y * s_p * s_r + c_y * c_r;
-  M[1][2] = -s_y * s_p * c_r + c_y * s_r;
-  M[2][0] = s_p;
-  M[2][1] = -c_p * s_r;
-  M[2][2] = c_p * c_r;
-
-  return M;
-}
-
-std::vector<float> LocalizationStage::GlobalToLocal(std::vector<std::vector<float>> M, cg::Location global_location)
-{
-  //float inv_M[4][4];
-  std::vector<float> local_location(3, 0.0f);
-  //float local_velocity[4][1];
-
-  // if(inverse(M, inv_M))
-  // {
-  //cg::Location actor_location = simulation_state.GetLocation(target_id);
-    //Vector3D actor_velocity = simulation_state.GectVelocity(actor_id);
-  std::vector<float> location(4, 0.0f);
-  location[0] = global_location.x;
-  location[1] = global_location.y;
-  location[2] = global_location.z;
-  location[3] = 1.0f;
-
-  // float velocity[4][1];
-  // velocity[0][0] = actor_velocity.x;
-  // velocity[1][0] = actor_velocity.y;
-  // velocity[2][0] = actor_velocity.z;
-  // velocity[3][0] = 0.0f;
-
-  matrixMultiply(M, location, local_location); // vector call by ref?
-  //matrixMultiply(inv_M, velocity, local_velocity);
-  
-  return local_location; //, velocity)
-  //}
-}
-
-void LocalizationStage::matrixMultiply(std::vector<std::vector<float>> M, std::vector<float>  V, std::vector<float> result){
-  for(unsigned long i=0; i < V.size() - 1; i++ ){
-    result[i]= M[i][0] * V[0] + M[i][1] * V[1] + M[i][2] * V[2] + M[i][3] * V[3];
-  }
-}
-
-void LocalizationStage::getCofactor(std::vector<std::vector<float>> A, std::vector<std::vector<float>> temp, unsigned p, unsigned q, unsigned n) 
-{ 
-    unsigned i = 0, j = 0; 
-  
-    // Looping for each element of the matrix 
-    for (unsigned row = 0; row < n; row++) 
-    { 
-        for (unsigned col = 0; col < n; col++) 
-        { 
-            //  Copying into temporary matrix only those element 
-            //  which are not in given row and column 
-            if (row != p && col != q) 
-            { 
-                temp[i][j++] = A[row][col]; 
-  
-                // Row is filled, so increase row index and 
-                // reset col index 
-                if (j == n - 1) 
-                { 
-                    j = 0; 
-                    i++; 
-                } 
-            } 
-        } 
-    } 
-} 
-  
-
-float LocalizationStage::determinant(std::vector<std::vector<float>> A, unsigned n) 
-{ 
-    float D = 0.0f; // Initialize result 
-  
-    //  Base case : if matrix contains single element 
-    if (n == 1) 
-        return A[0][0]; 
-  
-    std::vector<std::vector<float>> temp; // To store cofactors 
-    temp.resize(4, std::vector<float>(4, 0.0f));
-    float sign = 1.0f;  // To store sign multiplier 
-  
-     // Iterate for each element of first row 
-    for (unsigned f = 0; f < n; f++) 
-    { 
-        // Getting Cofactor of A[0][f] 
-        getCofactor(A, temp, 0, f, n); 
-        D += sign * A[0][f] * determinant(temp, n - 1); 
-  
-        // terms are to be added with alternate sign 
-        sign = -sign; 
-    } 
-  
-    return D; 
-} 
-  
-// Function to get adjoint of A[N][N] in adj[N][N]. 
-void LocalizationStage::adjoint(std::vector<std::vector<float>> A, std::vector<std::vector<float>> adj) 
-{ 
-  // temp is used to store cofactors of A[][] 
-  bool sign = false;
-  std::vector<std::vector<float>> temp;
-  temp.resize(4, std::vector<float>(4, 0.0f));
-
-  for (unsigned i=0; i<4; i++) 
-  { 
-      for (unsigned j=0; j<4; j++) 
-      { 
-          // Get cofactor of A[i][j] 
-          getCofactor(A, temp, i, j, 4); 
-
-          // sign of adj[j][i] positive if sum of row 
-          // and column indexes is even. 
-          sign = ((i+j)%2==0)? true: false; 
-
-          // Interchanging rows and columns to get the 
-          // transpose of the cofactor matrix 
-          adj[j][i] = sign?(determinant(temp, 3)):-(determinant(temp, 3)); 
-      } 
-  } 
-} 
-  
-// Function to calculate and store inverse, returns false if 
-// matrix is singular 
-std::vector<std::vector<float>> LocalizationStage::inverse(std::vector<std::vector<float>> A) 
-{ 
-  //float inverse[4][4];
-  std::vector<std::vector<float>> inverse;
-  inverse.resize(4, std::vector<float>(4, 0.0f));
-  // Find determinant of A[][] 
-  float det = determinant(A, 4); 
-  if (det <= 0.0001f) 
-  { 
-      //cout << "Singular matrix, can't find its inverse"; 
-      return inverse; 
-  } 
-
-  // Find adjoint 
-  std::vector<std::vector<float>> adj;
-  adj.resize(4, std::vector<float>(4, 0.0f));
-  
-  adjoint(A, adj); 
-
-  // Find Inverse using formula "inverse(A) = adj(A)/det(A)" 
-  for (unsigned i=0; i<4; i++) 
-      for (unsigned j=0; j<4; j++) 
-          inverse[i][j] = adj[i][j]/float(det); 
-
-  return inverse; 
-} 
-*/
 
 } // namespace traffic_manager
 } // namespace carla

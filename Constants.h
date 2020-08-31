@@ -112,7 +112,6 @@ static const float EPSILON_RELATIVE_SPEED = 0.001f;
 static const float MAX_JUNCTION_BLOCK_DISTANCE = 0.5f * WaypointSelection::SAFE_DISTANCE_AFTER_JUNCTION;
 } // namespace MotionPlan
 
-<<<<<<< HEAD
 namespace MTSCar {
 static const float MAX_ACC = 10.0f;
 static const float FREE_ACCELERATION_EXP = 4.0f;
@@ -123,8 +122,6 @@ static const float TIME_TO_CONTACT = 0.0f;
 static const float MAX_OBSERVING_DISTANCE = 1500.0f;
 }
 
-=======
->>>>>>> a6bf17c700482e03ea7664a04d595d2792ffea16
 namespace PID {
 static const float MAX_THROTTLE = 0.7f;
 static const float MAX_BRAKE = 1.0f;

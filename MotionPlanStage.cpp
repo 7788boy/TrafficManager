@@ -10,10 +10,7 @@ namespace traffic_manager {
 using namespace constants::MotionPlan;
 using namespace constants::WaypointSelection;
 using namespace constants::SpeedThreshold;
-<<<<<<< HEAD
 using namespace constants::MTSCar;
-=======
->>>>>>> a6bf17c700482e03ea7664a04d595d2792ffea16
 
 using constants::HybridMode::HYBRID_MODE_DT;
 
@@ -249,18 +246,8 @@ std::pair<bool, float> MotionPlanStage::CollisionHandling(const CollisionHazardD
 
     const float other_speed_along_heading = cg::Math::Dot(other_velocity, ego_heading);
 
-<<<<<<< HEAD
     //dynamic_target_velocity = GetLongitudinalAcc(ego_velocity.Length(), tl_hazard, float desired_velocity, other_velocity.Length(), float gap);
-    // Consider collision avoidance decisions only if there is positive relative velocity of the ego vehicle (meaning, ego vehicle is closing the gap to the lead vehicle).
-    if (ego_relative_speed > EPSILON_RELATIVE_SPEED) {
-      // If other vehicle is approaching lead vehicle and lead vehicle is further than follow_lead_distance 0 kmph -> 5m, 100 kmph -> 10m.
-      float follow_lead_distance = ego_relative_speed * FOLLOW_DISTANCE_RATE + MIN_FOLLOW_LEAD_DISTANCE;
-      if (available_distance_margin > follow_lead_distance) {
-        // Then reduce the gap between the vehicles till FOLLOW_LEAD_DISTANCE by maintaining a relative speed of RELATIVE_APPROACH_SPEED
-        dynamic_target_velocity = other_speed_along_heading + RELATIVE_APPROACH_SPEED;
-      }
-      // If vehicle is approaching a lead vehicle and the lead vehicle is further than CRITICAL_BRAKING_MARGIN but closer than FOLLOW_LEAD_DISTANCE.
-=======
+    
     // Consider collision avoidance decisions only if there is positive relative velocity
     // of the ego vehicle (meaning, ego vehicle is closing the gap to the lead vehicle).
     if (ego_relative_speed > EPSILON_RELATIVE_SPEED) {
@@ -274,7 +261,6 @@ std::pair<bool, float> MotionPlanStage::CollisionHandling(const CollisionHazardD
       }
       // If vehicle is approaching a lead vehicle and the lead vehicle is further
       // than CRITICAL_BRAKING_MARGIN but closer than FOLLOW_LEAD_DISTANCE.
->>>>>>> a6bf17c700482e03ea7664a04d595d2792ffea16
       else if (available_distance_margin > CRITICAL_BRAKING_MARGIN) {
         // Then follow the lead vehicle by acquiring it's speed along current heading.
         dynamic_target_velocity = std::max(other_speed_along_heading, RELATIVE_APPROACH_SPEED);
@@ -290,7 +276,7 @@ std::pair<bool, float> MotionPlanStage::CollisionHandling(const CollisionHazardD
 
   dynamic_target_velocity = std::min(max_target_velocity, dynamic_target_velocity);
 
-  return {collision_emergency_stop, dynamic_target_velocity};
+  return {collision_emergency_stop, dynamic_target_velocity}; 
 }
 
 void MotionPlanStage::RemoveActor(const ActorId actor_id) {
@@ -303,9 +289,12 @@ void MotionPlanStage::Reset() {
   teleportation_instance.clear();
 }
 
-<<<<<<< HEAD
+// /************************
+// *******MTS SECTION*******
+// ************************/
+
 // // Longitudinal
-// float MotionPlannerStage::GetLongitudinalAcc(float current_velocity, bool traffic_light_hazard, float desired_velocity, float object_velocity, float gap) 
+// float MotionPlanStage::GetLongitudinalAcc(float current_velocity, bool traffic_light_hazard, float desired_velocity, float object_velocity, float gap) 
 // {
 //   float acc_free = GetFreeAcc( current_velocity , desired_velocity);
 //   float brake_first = GetAcc(gap,  current_velocity,  object_velocity);
@@ -324,7 +313,7 @@ void MotionPlanStage::Reset() {
 
 // }
 
-// float MotionPlannerStage::GetFreeAcc( float v_current , float v_desired)
+// float MotionPlanStage::GetFreeAcc( float v_current , float v_desired)
 // {
 //   if( v_desired == 0.0f ) return 0.0f; 
 
@@ -332,7 +321,7 @@ void MotionPlanStage::Reset() {
 //   return acc;
 // }
 
-// float MotionPlannerStage::GetAcc(float gap, float current_velocity, float object_velocity)
+// float MotionPlanStage::GetAcc(float gap, float current_velocity, float object_velocity)
 // {
 //   if( object == NULL ) return 0.0f;
 
@@ -379,7 +368,7 @@ void MotionPlanStage::Reset() {
 //   return acc;
 // }
 
-// float MotionPlannerStage::GetDecForStopLine( float stopLine , float freeAcc , MTS_SituationData*	mSituationData , MTS_AgentData*	mAgentData ) const
+// float MotionPlanStage::GetDecForStopLine( float stopLine , float freeAcc , MTS_SituationData*	mSituationData , MTS_AgentData*	mAgentData ) const
 // {
 // 	// compute gap to stopline and evaluate the deceleration
 // 	float currentSpeed = mSituationData->mSubject->getCurrentSpeed();
@@ -399,7 +388,7 @@ void MotionPlanStage::Reset() {
 // 	return acc_stopline;
 // }
 
-// float MotionPlannerStage::ComputeDesiredGap(float current_velocity, float object_velocity)
+// float MotionPlanStage::ComputeDesiredGap(float current_velocity, float object_velocity)
 // {
 //   if(object == NULL) // how to judge
 //   	return min_gap + current_velocity * RESPONSE_TIME + current_velocity * current_velocity / (2 * sqrt(MAX_ACC * COMFORTABLE_DEC));
@@ -413,7 +402,7 @@ void MotionPlanStage::Reset() {
 // }
 
 // // Lateral
-// float MotionPlannerStage::getSpeedChange( MTS_MovingModelParameter* param , MTS_Vehicle* mSubject)
+// float MotionPlanStage::getSpeedChange( MTS_MovingModelParameter* param , MTS_Vehicle* mSubject)
 // {
 //   //float lateralSpeedChange;
 
@@ -439,7 +428,7 @@ void MotionPlanStage::Reset() {
 //   return lateralSpeedChange;
 // }
 
-// float MotionPlannerStage::_getLongitudinalTime( MTS_Vehicle* mSubject , float mMaxMovementTime ) const
+// float MotionPlanStage::_getLongitudinalTime( MTS_Vehicle* mSubject , float mMaxMovementTime ) const
 // {
 //   MTS_Vehicle *pred = mSubject->getPassedLeadingVehicle();
 
@@ -463,7 +452,7 @@ void MotionPlanStage::Reset() {
 //   return mMaxMovementTime;
 // }
 
-// float MotionPlannerStage::_getLateralSpeed( const MTS_Vehicle *veh , float moveTime ) const
+// float MotionPlanStage::_getLateralSpeed( const MTS_Vehicle *veh , float moveTime ) const
 // {
 //   MotionPlannerStage::ControllerType controllerType = veh->getControllerType();
 //   const MTS_VehicleController *vehController = veh->getCurrentController();
@@ -489,7 +478,7 @@ void MotionPlanStage::Reset() {
 
 // }
 
-// float MotionPlannerStage::_computeBestLateralOffset( MTS_Vehicle *veh , MTS_MovingModelParameter* param )
+// float MotionPlanStage::_computeBestLateralOffset( MTS_Vehicle *veh , MTS_MovingModelParameter* param )
 // {
 //   MTS_Vehicle *left = veh->getLeftVehicle();
 //   MTS_Vehicle *right = veh->getRightVehicle();
@@ -623,7 +612,7 @@ void MotionPlanStage::Reset() {
   
 // }
 
-// bool MotionPlannerStage::_checkLeftSafety( float desiredOffset , float *safeOffset , MTS_Region *region) const
+// bool MotionPlanStage::_checkLeftSafety( float desiredOffset , float *safeOffset , MTS_Region *region) const
 // {
 //   const std::vector< MTS_Vehicle* > &rearVehicles = mSubject->getLeftRearVehicles();
 //   std::vector< MTS_Vehicle* >::const_iterator it = rearVehicles.begin();
@@ -734,7 +723,7 @@ void MotionPlanStage::Reset() {
 
 // }
 
-// bool MotionPlannerStage::_checkSafety( MTS_Vehicle *subject , MTS_Vehicle *object , float moveSpeed , float moveTime , bool subjectAsLeader , bool subjectAsFollower , float* safeTime ) const
+// bool MotionPlanStage::_checkSafety( MTS_Vehicle *subject , MTS_Vehicle *object , float moveSpeed , float moveTime , bool subjectAsLeader , bool subjectAsFollower , float* safeTime ) const
 // {
 //   MTS_VehicleController *subjectController = subject->getCurrentController();
 //   MTS_VehicleController *objectController = object->getCurrentController();
@@ -783,7 +772,7 @@ void MotionPlanStage::Reset() {
 //   return false;
 // }
 
-// bool MotionPlannerStage::_checkRightSafety( float desiredOffset , float *safeOffset , MTS_Region *region) const
+// bool MotionPlanStage::_checkRightSafety( float desiredOffset , float *safeOffset , MTS_Region *region) const
 // {
 //   const std::vector< MTS_Vehicle* > &rearVehicles = mSubject->getRightRearVehicles();
 //   std::vector< MTS_Vehicle* >::const_iterator it = rearVehicles.begin();
@@ -883,7 +872,7 @@ void MotionPlanStage::Reset() {
 //   return safe;
 // }
 
-// float MotionPlannerStage::getLateralTime( float mDesiredLateralOffset ) const
+// float MotionPlanStage::getLateralTime( float mDesiredLateralOffset ) const
 // {
 //   float diff_lat = mDesiredLateralOffset - mSubject->getCurrentController()->getLateralOffset();
 //   float v_lat = mSubject->getCurrentController()->getLateralSpeed();
@@ -898,13 +887,13 @@ void MotionPlanStage::Reset() {
 //   return ttc;
 // }
 
-// void MotionPlannerStage::updateBestLateralOffset( MTS_MovingModelParameter* param , MTS_Vehicle* mSubject)
+// void MotionPlanStage::updateBestLateralOffset( MTS_MovingModelParameter* param , MTS_Vehicle* mSubject)
 // {
 //   float newLateralOffset = _computeBestLateralOffset( mSubject , param );
 //   mSubject->setDesiredLateralOffset( newLateralOffset );
 // }
 
-// bool MotionPlannerStage::_checkBlockage( MTS_Region *space, const MTS_Vehicle *blockage ) const
+// bool MotionPlanStage::_checkBlockage( MTS_Region *space, const MTS_Vehicle *blockage ) const
 // {
 //   float spaceCenter = ( space->leftBorder + space->rightBorder ) / 2.0f;
 //   float blockageCenter = blockage->getCurrentController()->getLateralOffset();
@@ -919,7 +908,7 @@ void MotionPlanStage::Reset() {
 
 
 // // Tool
-// float MotionPlannerStage::getGap(int actor_id, int object_id) const
+// float MotionPlanStage::getGap(int actor_id, int object_id) const
 // {
 // 	float halfPredLen = simulation_state.GetDimensions(object_id).x; //pred->getCurrentController()->getLength() / 2.0f;
 // 	float halfVehLen = simulation_state.GetDimensions(actor_id).x; //getLength() / 2.0f;
@@ -929,7 +918,7 @@ void MotionPlanStage::Reset() {
 // 	return gap;
 // }
 
-// float MotionPlannerStage::getGapToStopLine(float stopOffset, int actor_id) const
+// float MotionPlanStage::getGapToStopLine(float stopOffset, int actor_id) const
 // {
 // 	float halfVehLen = simulation_state.GetDimensions(actor_id).x;
 // 	float headOffset = getOffset() + halfVehLen; // self.location
@@ -937,7 +926,7 @@ void MotionPlanStage::Reset() {
 // 	return stopOffset - headOffset;
 // }
 
-// float MotionPlannerStage::GetRelativeOffset(int actor_id, int actor_id) const
+// float MotionPlanStage::GetRelativeOffset(int actor_id, int actor_id) const
 // {
 //   float object_offset = simulation_state.GetLocation(object_id);
 //   float self_offset = simulation_state.GetLocation(actor_id);
@@ -945,7 +934,7 @@ void MotionPlanStage::Reset() {
 //   return self_offset - object_offset;
 // } 
 
-// float MotionPlannerStage::getExtendedGap( const MTS_Vehicle *pred ) const
+// float MotionPlanStage::getExtendedGap( const MTS_Vehicle *pred ) const
 // {
 //   MTS_VehicleController *controller = pred->getCurrentController();
 
@@ -976,7 +965,5 @@ void MotionPlanStage::Reset() {
 // }
 
 
-=======
->>>>>>> a6bf17c700482e03ea7664a04d595d2792ffea16
 } // namespace traffic_manager
 } // namespace carla
