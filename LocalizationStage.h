@@ -71,6 +71,10 @@ public:
 
   void DrawLeader(ActorId actor_id, LocalizationData &output);
 
+  void DrawNeighbor(ActorId actor_id, LocalizationData &output);
+
+  void MTSUpdate(const unsigned long index);
+  
   void UpdateLeader(const unsigned long index);
 
   void UpdateNeighbor(const unsigned long index);
@@ -82,6 +86,8 @@ public:
   void GetSurroundVehicle(const unsigned long index);
 
   bool isOverlapped(ActorId actor_id, ActorId target_id, float target_location_y) const;
+
+  bool isLogitudinalOverlapped(ActorId actor_id, ActorId target_id, float target_location_x) const;
   
   std::array<float, 4> GlobalToLocal(ActorId actor_id, cg::Location global_location);
 

@@ -119,7 +119,7 @@ static const float COMFORTABLE_DEC = 10.0f;
 static const float MIN_GAP = 2.5f;
 static const float RESPONSE_TIME = 0.02f;
 static const float TIME_TO_CONTACT = 0.0f;
-static const float MAX_OBSERVING_DISTANCE = 1500.0f;
+static const float MAX_OBSERVING_DISTANCE = 50.0f;
 }
 
 namespace PID {
