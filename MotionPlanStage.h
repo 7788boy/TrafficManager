@@ -66,6 +66,18 @@ public:
   void RemoveActor(const ActorId actor_id);
 
   void Reset();
+
+  float GetLongitudinalAcc(const LocalizationData &localization, ActorId actor_id);
+  float GetFreeAcc(ActorId actor_id);
+  float GetAcc(ActorId actor_id, ActorId target_id);
+  float ComputeDesiredGap(float actor_velocity, float target_velocity, ActorId target_id);
+  float GetGap(ActorId actor_id, ActorId target_id);
+  float GetExtendedGap(ActorId actor_id, ActorId target_id);
+  float GetRelativeOffset(ActorId actor_id, ActorId target_id);
+  float GetLateralSeparation(ActorId actor_id, ActorId target_id);
+  std::array<float, 4> GlobalToLocal(ActorId actor_id, cg::Location location);
+  std::array<float, 4> matrixMultiply(std::array<float, 16> M, std::array<float, 4> V);
+
 };
 
 } // namespace traffic_manager

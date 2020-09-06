@@ -33,7 +33,6 @@ void LocalizationStage::Update(const unsigned long index) {
 
   const ActorId actor_id = vehicle_id_list.at(index);
   const cg::Location vehicle_location = simulation_state.GetLocation(actor_id);
-  //const cg::Rotation vehicle_rotation = simulation_state.GetRotation(actor_id);
   const cg::Vector3D heading_vector = simulation_state.GetHeading(actor_id);
   const cg::Vector3D vehicle_velocity_vector = simulation_state.GetVelocity(actor_id);
   const float vehicle_speed = vehicle_velocity_vector.Length();
@@ -414,27 +413,33 @@ void LocalizationStage::DrawBuffer(Buffer &buffer) {
   }
 }
 
-void LocalizationStage::DrawLeader(ActorId actor_id, LocalizationData &output) {
+void LocalizationStage::DrawLeader(ActorId actor_id, LocalizationData &output)
+{
   cg::Location actor_location = simulation_state.GetLocation(actor_id);
-  actor_location.z += 3.0f; 
+  actor_location.z += 3.0f;
   cc::DebugHelper::Color color_ego {255u, 0u, 0u};
   cc::DebugHelper::Color color_main_leader {0u, 255u, 0u};
   cc::DebugHelper::Color color_potential_leader {0u, 0u, 255u};
-  
-  debug_helper.DrawPoint(actor_location, 1.0f, color_ego, 0.1, true);
-  
+  //Draw range line
+  const cg::Vector3D actor_heading = simulation_state.GetHeading(actor_id);
+  cg::Vector3D actor_heading_unit = actor_heading.MakeUnitVector();
+  cg::Location actor_location_end = actor_location + cg::Location(actor_heading_unit *= MAX_OBSERVING_DISTANCE);
+  debug_helper.DrawLine(actor_location, actor_location_end, 0.1f, color_ego, 0.2f, true);
+  // debug_helper.DrawPoint(actor_location, 1.0f, color_ego, 0.1, true);
+  debug_helper.DrawBox( cg::BoundingBox(actor_location, cg::Vector3D(0.3,0.3,0.3)), simulation_state.GetRotation(actor_id), 0.1f, color_ego, 0.2f, true);
   if(output.leader.main_leader)
   {
     cg::Location first_location = simulation_state.GetLocation(output.leader.main_leader.get());
     first_location.z += 3.0f;
-    debug_helper.DrawPoint(first_location, 1.0f, color_main_leader, 0.1, true);
+    //debug_helper.DrawPoint(first_location, 0.1f, color_main_leader, 0.1, true);
+    debug_helper.DrawBox( cg::BoundingBox(first_location, cg::Vector3D(0.3,0.3,0.3)), simulation_state.GetRotation(actor_id), 0.1f, color_main_leader, 0.2f, true);
     }
-
   if(output.leader.potential_leader)
   { 
     cg::Location second_location = simulation_state.GetLocation(output.leader.potential_leader.get());
     second_location.z += 3.0f;
-    debug_helper.DrawPoint(second_location, 1.0f, color_potential_leader, 0.1, true);
+    //debug_helper.DrawPoint(second_location, 1.0f, color_potential_leader, 0.1, true);
+    debug_helper.DrawBox( cg::BoundingBox(second_location, cg::Vector3D(0.3,0.3,0.3)), simulation_state.GetRotation(actor_id), 0.1f, color_potential_leader, 0.2f, true);
   }
 }
 
@@ -478,8 +483,10 @@ void LocalizationStage::UpdateLeader(const unsigned long index)
     SimpleWaypointPtr target_waypoint = local_map->GetWaypoint(target_location);
     // crd::RoadId target_road = target_waypoint->GetWaypoint()->GetRoadId();
     // crd::LaneId target_lane = target_waypoint->GetWaypoint()->GetLaneId();
-    cg::Vector3D actor_forward_vector = actor_waypoint->GetForwardVector();
-    cg::Vector3D target_forward_vector = target_waypoint->GetForwardVector();
+    const cg::Vector3D actor_forward_vector = simulation_state.GetHeading(actor_id);
+    //cg::Vector3D actor_forward_vector = actor_waypoint->GetForwardVector();
+    const cg::Vector3D target_forward_vector = simulation_state.GetHeading(target_id);
+    //cg::Vector3D target_forward_vector = target_waypoint->GetForwardVector();
     
     // location heady
     //float target_direction = DeviationDotProduct(actor_location, actor_forward_vector, target_location);

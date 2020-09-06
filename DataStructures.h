@@ -41,6 +41,7 @@ struct MTS_Leader{
 };
 
 struct MTS_Neighbor{
+  
   bool updated;
   std::vector< ActorId > vehicles;
 };

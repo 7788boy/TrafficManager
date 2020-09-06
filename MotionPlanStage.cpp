@@ -89,14 +89,12 @@ void MotionPlanStage::Update(const unsigned long index) {
 
   // Target velocity for vehicle.
   const float ego_speed_limit = simulation_state.GetSpeedLimit(actor_id);
-  float max_target_velocity = parameters.GetVehicleTargetVelocity(actor_id, ego_speed_limit) / 3.6f;
+  //float max_target_velocity = parameters.GetVehicleTargetVelocity(actor_id, ego_speed_limit) / 3.6f;
 
   // Collision handling and target velocity correction.
-  std::pair<bool, float> collision_response = CollisionHandling(collision_hazard, tl_hazard, ego_velocity,
-                                                                ego_heading, max_target_velocity);
-  bool collision_emergency_stop = collision_response.first;
-  float dynamic_target_velocity = collision_response.second;
-
+  //std::pair<bool, float> collision_response = CollisionHandling(collision_hazard, tl_hazard, ego_velocity, ego_heading, max_target_velocity);
+  bool collision_emergency_stop = false; //collision_response.first;
+  float dynamic_target_velocity = GetLongitudinalAcc(localization, actor_id); //collision_response.second;
 
   // Don't enter junction if there isn't enough free space after the junction.
   bool safe_after_junction = SafeAfterJunction(localization, tl_hazard, collision_emergency_stop);
@@ -237,7 +235,7 @@ std::pair<bool, float> MotionPlanStage::CollisionHandling(const CollisionHazardD
                                                           const float max_target_velocity) {
   bool collision_emergency_stop = false;
   float dynamic_target_velocity = max_target_velocity;
-
+  
   if (collision_hazard.hazard && !tl_hazard) {
     const ActorId other_actor_id = collision_hazard.hazard_actor_id;
     const cg::Vector3D other_velocity = simulation_state.GetVelocity(other_actor_id);
@@ -293,677 +291,735 @@ void MotionPlanStage::Reset() {
 // *******MTS SECTION*******
 // ************************/
 
-// // Longitudinal
-// float MotionPlanStage::GetLongitudinalAcc(float current_velocity, bool traffic_light_hazard, float desired_velocity, float object_velocity, float gap) 
-// {
-//   float acc_free = GetFreeAcc( current_velocity , desired_velocity);
-//   float brake_first = GetAcc(gap,  current_velocity,  object_velocity);
-//   float brake_second = GetAcc( gap,  current_velocity,  object_velocity);
-//   float max_deceleration = std::max(brake_first, brake_second);
-
-//   if( traffic_light_hazard )
-//   {
-//   	float brake_stopLine = GetDecForStopLine( param->stopLineOffset , acc_free , mSituationData ,mAgentData );
-//     max_deceleration = std::max(max_deceleration, brake_stopLine)
-//   }
+// Longitudinal
+float MotionPlanStage::GetLongitudinalAcc(const LocalizationData &localization, ActorId actor_id) 
+{
+  float acc_free = GetFreeAcc(actor_id);
+  float brake_first = 0.0f;
+  float brake_second = 0.0f;
   
-//   float acc = acc_free - max_deceleration;
-
-//   return acc;
-
-// }
-
-// float MotionPlanStage::GetFreeAcc( float v_current , float v_desired)
-// {
-//   if( v_desired == 0.0f ) return 0.0f; 
-
-//   float acc = MAX_ACC * ( 1.0f - pow( v_current/v_desired , FREE_ACCELERATION_EXP) );
-//   return acc;
-// }
-
-// float MotionPlanStage::GetAcc(float gap, float current_velocity, float object_velocity)
-// {
-//   if( object == NULL ) return 0.0f;
-
-//   float gap = getGap(actor_id, object_id);
-//   //float gap_prepare = object_velocity * TIME_TO_CONTACT;
-
-//   //gap += gap_prepare;
-
-//   bool gapExtended = false;
+  if(localization.leader.main_leader)
+    brake_first = GetAcc(actor_id, localization.leader.main_leader.get());
+  if(localization.leader.potential_leader)
+    brake_second = GetAcc(actor_id, localization.leader.potential_leader.get());
   
-//   if( gap < 0.0f) // current leader but the gap less than 0
-//   {
-//   	// try to extend the gap according to the yaw angle of the leader
-//   	gapExtended = true;
-//   	gap += subjectController->getExtendedGap( object );
-//   }
+  float max_deceleration = std::max(brake_first, brake_second);
 
-//   if( gap < 0.0f ) // the gap is less than 0 (even after extension)
-//   	return 0.0f;
+  // if(traffic_light_hazard)
+  // {
+  // 	float brake_stopLine = GetDecForStopLine(actor_id);
+  //   max_deceleration = std::max(max_deceleration, brake_stopLine)
+  // }
   
+  float acc = acc_free - max_deceleration;
 
-//   float s = ComputeDesiredGap(current_velocity, object_velocity);
+  return acc;
+
+}
+
+float MotionPlanStage::GetFreeAcc(ActorId actor_id)
+{
+  const float ego_speed_limit = simulation_state.GetSpeedLimit(actor_id);
+  const float v_current = simulation_state.GetVelocity(actor_id).Length();
+  float v_desired = parameters.GetVehicleTargetVelocity(actor_id, ego_speed_limit) / 3.6f;
   
-//   bool approaching = current_velocity - object_velocity >= 0.0f;
-//   bool closeEnough = gap <= 1.2f * s;
+  if( v_desired == 0.0f ) return 0.0f; 
 
-//   float acc_gapApproachSpeed = 2.0f;//mAgentData->mDriver->mGapdAccelerationExponent;
-//   float acc = MAX_ACC * std::pow( s / gap , acc_gapApproachSpeed ) * ( approaching || closeEnough );
+  float acc = MAX_ACC * (1.0f - pow( v_current / v_desired, FREE_ACCELERATION_EXP));
+  return acc;
+}
 
-//   if( !approaching && closeEnough )
-//     acc = MAX_ACC * (s/gap);
+float MotionPlanStage::GetAcc(ActorId actor_id, ActorId target_id)
+{
+  if(!target_id) 
+    return 0.0f;
+
+  float gap = GetGap(actor_id, target_id);
+  bool gapExtended = false;
   
+  if( gap < 0.0f) // current leader but the gap less than 0
+  {
+  	// try to extend the gap according to the yaw angle of the leader
+  	gapExtended = true;
+  	gap += GetExtendedGap(actor_id, target_id);
+  }
+
+  if( gap < 0.0f ) // the gap is less than 0 (even after extension)
+  	return 0.0f;
+
+  const float actor_velocity = simulation_state.GetVelocity(actor_id).Length();
+  const float target_velocity = simulation_state.GetVelocity(target_id).Length();
+  float s = ComputeDesiredGap(actor_velocity, target_velocity, target_id);
   
-//   if( gapExtended == false && acc > maxDec )
-//   {
-//   	float extendedGap = subjectController->getExtendedGap( object );
-//   	if( extendedGap != 0 )
-//   	{
-//   		float gapRatio = gap / ( gap + extendedGap );
-//   		acc *= gapRatio * gapRatio;
-//   	}
-//   }
+  bool approaching = (actor_velocity - target_velocity) >= 0.0f;
+  bool closeEnough = gap <= 1.2f * s;
+  float acc = MAX_ACC * std::pow(s / gap, 2.0f) * (approaching || closeEnough);
 
-//   return acc;
-// }
-
-// float MotionPlanStage::GetDecForStopLine( float stopLine , float freeAcc , MTS_SituationData*	mSituationData , MTS_AgentData*	mAgentData ) const
-// {
-// 	// compute gap to stopline and evaluate the deceleration
-// 	float currentSpeed = mSituationData->mSubject->getCurrentSpeed();
-// 	float gap = mSituationData->mSubject->getCurrentController()->getGapToStopLine(stopLine) ;
-// 	if( gap <= 1.0 ) gap = 1.0;
-
-// 	float acc_stopline ;//= freeAcc;
-
-// 	float b_com = mAgentData->mDriver->mComfortableDeceleration;
-// 	float a_max = mAgentData->mVehicleCapability->mMaxAcceleration;
-// 	float MinGap =  mAgentData->mDriver->mMinGap;
-// 	float responseTime = mAgentData->mDriver->mResponseTime ;
-// 	float s = MinGap + currentSpeed*responseTime + currentSpeed*currentSpeed / (2*sqrt(b_com*a_max));
-// 	acc_stopline = b_com * (s*s) / (gap*gap) ;
-
-
-// 	return acc_stopline;
-// }
-
-// float MotionPlanStage::ComputeDesiredGap(float current_velocity, float object_velocity)
-// {
-//   if(object == NULL) // how to judge
-//   	return min_gap + current_velocity * RESPONSE_TIME + current_velocity * current_velocity / (2 * sqrt(MAX_ACC * COMFORTABLE_DEC));
+  if(!approaching && closeEnough)
+    acc = MAX_ACC * (s / gap);
   
-//   float speedCon = (current_velocity * RESPONSE_TIME + current_velocity * (current_velocity - object_velocity) / (2 * sqrt(MAX_ACC * COMFORTABLE_DEC)));
+  if(gapExtended == false && acc > MAX_ACC)
+  {
+  	float extendedGap = GetExtendedGap(actor_id, target_id);
+  	if(extendedGap != 0)
+  	{
+  		float gapRatio = gap / (gap + extendedGap);
+  		acc *= gapRatio * gapRatio;
+  	}
+  }
 
-//   float desired_gap = (MIN_GAP  + speedCon);
-//   if(desired_gap < 0.0f) desired_gap = MIN_GAP;
+  return acc;
+}
 
-//   return desired_gap;
-// }
+float MotionPlanStage::ComputeDesiredGap(float actor_velocity, float target_velocity, ActorId target_id)
+{
+  if(!target_id)
+  	return MIN_GAP + actor_velocity * RESPONSE_TIME + actor_velocity * actor_velocity / (2 * sqrt(MAX_ACC * COMFORTABLE_DEC));
 
-// // Lateral
-// float MotionPlanStage::getSpeedChange( MTS_MovingModelParameter* param , MTS_Vehicle* mSubject)
-// {
-//   //float lateralSpeedChange;
-
-//   this->mSubject = mSubject;
+  float speedCon = (actor_velocity * RESPONSE_TIME + actor_velocity * (actor_velocity - target_velocity) / (2 * sqrt(MAX_ACC * COMFORTABLE_DEC)));
+  float desired_gap = (MIN_GAP + speedCon);
   
-//   float diff_lat = mSubject->getDesiredLateralOffset() - mSubject->getCurrentController()->getLateralOffset();
-//   float v_lat = mSubject->getCurrentController()->getLateralSpeed();
-//   float t_lat = 2.0f * diff_lat / v_lat;
+  if(desired_gap < 0.0f)
+    desired_gap = MIN_GAP;
 
-//   // if the time to decelerate to zero lateral speed is smaller than maximum movement time
-//   if( t_lat > 0.0f && t_lat < 2.0 ) 
-//   {
-//     //t_lat = t_lat;
-//   }
-//   else
-//   {
-//     t_lat = _getLongitudinalTime( mSubject , 2.0f );
-//   }
+  return desired_gap;
+}
 
+/*
+float MotionPlanStage::GetDecForStopLine(ActorId actor_id, float stopLine)
+{
+	// compute gap to stopline and evaluate the deceleration
+	float currentSpeed = simulation_state.GetVelocity(actor_id).Length();
+	float gap = getGapToStopLine(stopLine);
 
-//   float lateralSpeedChange = _getLateralSpeed( mSubject , t_lat );
+	if( gap <= 1.0 )
+    gap = 1.0;
 
-//   return lateralSpeedChange;
-// }
+	float s = MIN_GAP + currentSpeed * RESPONSE_TIME + currentSpeed * currentSpeed / (2*sqrt(COMFORTABLE_DEC * MAX_ACC));
 
-// float MotionPlanStage::_getLongitudinalTime( MTS_Vehicle* mSubject , float mMaxMovementTime ) const
-// {
-//   MTS_Vehicle *pred = mSubject->getPassedLeadingVehicle();
+	return COMFORTABLE_DEC * (s * s) / (gap * gap);
+}*/
 
-//   float v = mSubject->getCurrentController()->getCurrentSpeed();
-//   float t_long = mSubject->getCurrentController()->getGapToStopLine() / v;
+// Lateral velocity.
+float MotionPlanStage::GetSpeedChange(ActorId* actor_id)
+{
+  float lateral_offset = GetDesiredLateralOffset(); //??? 
+  float lateral_veocity = simulation_state.GetVelocity(actor_id).y; //local
+  float lateral_time = 2.0f * lateral_offset / lateral_veocity;
 
-//   if( pred != NULL )
-//   {
-//     float v_pred = 0.0f;
-//     float deltaV = v - v_pred;
+  if(lateral_time <= 0.0 || lateral_time >= MAX_MOVEMENT_TIME)
+    lateral_time = GetLongitudinalTime(actor_id);
 
-//     float s = mSubject->getCurrentController()->getGap( pred ); 
+  return GetLateralSpeed(actor_id, lateral_time);
+}
+
+float MotionPlanStage::GetLongitudinalTime(ActorId* actor_id) const
+{
+  ActorId *pred = localization.leader.main_leader.get();
+  float longitudinal_velocity = simulation_state.GetVelocity(actor_id).Length(); 
+  float longitudinal_time = GetGapToStopLine() / longitudinal_velocity;
+
+  if(pred)
+  {
+    float s = GetGap(actor_id, pred);
+    longitudinal_time = std::min(s / longitudinal_velocity, longitudinal_time);
+  }
+
+  if( longitudinal_time > 0 && longitudinal_time < MAX_MOVEMENT_TIME )
+    return longitudinal_time;
+
+  return MAX_MOVEMENT_TIME;
+}
+
+float MotionPlanStage::GetLateralSpeed(ActorId* actor_id, float move_time) const
+{
+  float lateral_offset = GetDesiredLateralOffset(); //???
+  float current_location = simulation_state.GetLocation(actor_id).y; //local
+  float lateral_velocity = simulation_state.GetVelocity(actor_id).y; //local
+  float acc = 2 * ((lateral_offset - current_location) / (move_time * move_time) - lateral_velocity / move_time);
+
+  if( acc < 0 )
+    acc = std::max(-MAX_ACC, acc);
+  else
+    acc = std::min(MAX_ACC, acc);
+
+  return acc;
+}
+
+// Lateral desired offset.
+float MotionPlanStage::ComputeBestLateralOffset(ActorId actor_id, LocalizationData &localization)
+{
+  ActorId *left = localization.surrounding.LeftVehicle; //veh->getLeftVehicle();
+  ActorId *right = localization.surrounding.RightVehicle; //veh->getRightVehicle();
+  //MTS_Edge *edge = veh->getLane()->getEdge();
+
+  //int typeCode = veh->getVehicleType()->getTypeCode();
+  float actor_half_width = simulation_state.GetDimensions(actor_id).y; // veh->getVehicleType()->getStaticWidth() / 2.0f;
+  float actor_lateral_offset = simulation_state.GetLocation(actor_id).y; //veh->getLateralOffset();
+  //float vehOffset = simulation_state.GetLocation(actor_id).x + simulation_state.GetDimensions(actor_id).x;
+  float actor_velocity = simulation_state.GetVelocity(actor_id).x //veh->getCurrentSpeed();
+  //MTS_Region &validSpace = localization.situation.mCurrentRegion; //param->currentRegion;
+  int valid_space_ID = -1;
+  //int best_space_ID = -1;
+  float max_cost = 0.0f;
+  float max_valid_cost = 0.0f;
+  //int spaceSize = localization.situation.mRegion.size() ;//param->allRegion.size();
+
+  for( int i = 0; i < localization.situation.mRegion.size(); ++i)
+  {
+    if( localization.situation.mRegion[i]->width < 1.8f * actor_half_width )
+      continue;
+    //float laneCenter = localization.situation.mRegion[i]->offset;
+
+    float offset_diff = localization.situation.mRegion[i]->offset - actor_lateral_offset;
+    float safe_offset;
+
+    bool safeSpace = true;
+    if( localization.situation.mRegion[i]->width < actor_half_width * 2)
+    {
+      safeSpace = false;
+      localization.situation.mRegion[i]->safety = 0.0f;
+    }
+    else if( offset_diff < 0 ) // check if the front and the rear of subject vehicle at the desired offset are safe
+    {
+      bool safeLeftSpace = CheckLeftSafety(actor_id, localization.situation.mRegion[i]->offset , &safe_offset , localization.situation.mRegion[i]);
+      bool adjustOffset = localization.situation.mSpaceOriented  && safe_offset < actor_lateral_offset;
+
+      if( !safeLeftSpace && !adjustOffset ) 
+        safeSpace = false;
+
+      else if( !safeLeftSpace )
+        offset_diff = safe_offset - actor_lateral_offset;
+    }
+    else if( offset_diff > 0 ) // check if the front and the rear of subject vehicle at the desired offset are safe
+    {
+      bool safeRightSpace = CheckRightSafety(actor_id, localization.situation.mRegion[i]->offset , &safe_offset , localization.situation.mRegion[i]);
+      bool adjustOffset = localization.situation.mSpaceOriented  && safe_offset > actor_lateral_offset;
+
+      if( !safeRightSpace && !adjustOffset )
+        safeSpace = false;
+
+      else if( !safeRightSpace )
+        offset_diff = safe_offset - actor_lateral_offset;
+    }
+
     
-//     float ttc = s / deltaV;
-//     if( ttc < t_long )
-//       t_long = ttc;
-//   }
-//   if( t_long > 0 && t_long < mMaxMovementTime )
-//     return t_long;
+    offset_diff = std::abs(offset_diff);
+    float gap = localization.situation.mRegion[i]->gap;
+    bool velCosistent = (offset_diff * simulation_state.GetVelocity(actor_id).y) > 0; //local	
+    float speed_diff = localization.situation.mRegion[i]->maxPassingSpeed - actor_velocity;
+    float safety = localization.situation.mRegion[i]->safety;
 
-//   return mMaxMovementTime;
-// }
+    float w_speed	= param->mRegionSelectionWeight->weight_speed;
+    float w_gap		= param->mRegionSelectionWeight->weight_gap;
+    float w_dis		= param->mRegionSelectionWeight->weight_lateralDistance;
+    float w_vel		= param->mRegionSelectionWeight->weight_velocityConsistency;
+    float w_safe	= param->mRegionSelectionWeight->weight_safety;
 
-// float MotionPlanStage::_getLateralSpeed( const MTS_Vehicle *veh , float moveTime ) const
-// {
-//   MotionPlannerStage::ControllerType controllerType = veh->getControllerType();
-//   const MTS_VehicleController *vehController = veh->getCurrentController();
+    // bool dirPriority = false;
+    // int laneIdx = edge->getLaneID( localization.situation.mRegion[i]->offset );
+    // MTS_Lane *lane = edge->getLane( laneIdx );
+    // bool priority = lane->havePriority( typeCode );
+    // bool permission = lane->havePermission( typeCode );
+    // bool target = laneIdx == veh->getDesireLane();
   
-//   //float a_max = veh->getMaxAcceleration();
-
-//   float x_desired = vehController->getDesiredLateralOffset();//getDynamicDesiredOffset( veh );
-//   float x_current = vehController->getLateralOffset();
-//   float v_lateral = vehController->getLateralSpeed();
-
-//   //float t = moveTime;
-
-//   //float acc = 0.0f;
-
-//   float acc = 2 * ((x_desired-x_current) / (moveTime * moveTime) - v_lateral / moveTime);
-
-//   if( acc < 0 )
-//     acc = MAX( -MAX_ACC , acc );
-//   else
-//     acc = MIN( MAX_ACC , acc );
-
-//   return acc;
-
-// }
-
-// float MotionPlanStage::_computeBestLateralOffset( MTS_Vehicle *veh , MTS_MovingModelParameter* param )
-// {
-//   MTS_Vehicle *left = veh->getLeftVehicle();
-//   MTS_Vehicle *right = veh->getRightVehicle();
-//   MTS_Edge *edge = veh->getLane()->getEdge();
-
-//   int typeCode = veh->getVehicleType()->getTypeCode();
-//   float halfVehWidth = veh->getVehicleType()->getStaticWidth() / 2.0f;
-//   float vehLateralOffset = veh->getLateralOffset();
-//   float vehOffset = veh->getOffset() + veh->getVehicleType()->getStaticLength() / 2.0f;
-//   float vehSpeed = veh->getCurrentSpeed();
-//   MTS_Region &validSpace = param->currentRegion;
-
-//   int validSpaceID = -1;
-//   int bestSpaceID = -1;
-//   float maxCost = 0.0f;
-//   float maxValidCost = 0.0f;
-
-//   int spaceSize = param->allRegion.size();
-  
-//   for( int i = 0 ; i < spaceSize ; ++i )
-//   {
-//     if( param->allRegion[i]->width < 1.8f * halfVehWidth )
-//       continue;
-//     float laneCenter = param->allRegion[i]->offset;
-
-//     float offset_diff = param->allRegion[i]->offset - vehLateralOffset;
-//     float safeOffset;
-
-//     bool safeSpace = true;
-//     if( param->allRegion[i]->width < veh->getVehicleType()->getStaticWidth() )
-//     {
-//       safeSpace = false;
-//       param->allRegion[i]->safety = 0.0f;
-//     }
-//     else if( offset_diff < 0 ) // check if the front and the rear of subject vehicle at the desired offset are safe
-//     {
-//       bool safeLeftSpace = _checkLeftSafety( param->allRegion[i]->offset , &safeOffset , param->allRegion[i] );
-//       bool adjustOffset = param->mSpaceOriented  && safeOffset < vehLateralOffset;
-
-//       if( !safeLeftSpace && !adjustOffset ) 
-//         safeSpace = false;
-
-//       else if( !safeLeftSpace )
-//         offset_diff = safeOffset - vehLateralOffset;
-//     }
-//     else if( offset_diff > 0 ) // check if the front and the rear of subject vehicle at the desired offset are safe
-//     {
-//       bool safeRightSpace = _checkRightSafety( param->allRegion[i]->offset , &safeOffset , param->allRegion[i]);
-//       bool adjustOffset = param->mSpaceOriented  && safeOffset > vehLateralOffset;
-
-//       if( !safeRightSpace && !adjustOffset )
-//         safeSpace = false;
-
-//       else if( !safeRightSpace )
-//         offset_diff = safeOffset - vehLateralOffset;
-//     }
-
-//     bool dirPriority = false;
-//     offset_diff = ABS( offset_diff );
-//     float gap = param->allRegion[i]->gap;
-//     int laneIdx = edge->getLaneID( param->allRegion[i]->offset );
-//     MTS_Lane *lane = edge->getLane( laneIdx );
-//     bool priority = lane->havePriority( typeCode );
-//     bool permission = lane->havePermission( typeCode );
-//     bool target = laneIdx == veh->getDesireLane();
-//     bool velCosistent = ( offset_diff * veh->getLateralSpeed() ) > 0;		
-//     float speed_diff = param->allRegion[i]->maxPassingSpeed - vehSpeed;
-//     MTS_Vehicle *brokenVehicle = lane->getBlockage();
-//     bool blockage = lane->endOfRoad() || ( brokenVehicle != NULL && _checkBlockage( param->allRegion[i] ,  brokenVehicle ) );
-//     float safety = param->allRegion[i]->safety;
-//     float turnControl = _turnControl( veh , param->allRegion[i] );
-//     float w_speed		= param->mRegionSelectionWeight->weight_speed;
-//     float w_gap			= param->mRegionSelectionWeight->weight_gap;
-//     float w_dis			= param->mRegionSelectionWeight->weight_lateralDistance;
-//     float w_blockage	= -param->mRegionSelectionWeight->weight_blockage;
-//     float w_priority	= param->mRegionSelectionWeight->weight_priority;
-//     float w_permission	= param->mRegionSelectionWeight->weight_permission; 
-//     float w_target		= param->mRegionSelectionWeight->weight_targetLane;
-//     float w_dir			= param->mRegionSelectionWeight->weight_targetDirection;
-//     float w_vel			= param->mRegionSelectionWeight->weight_velocityConsistency;
-//     float w_safe		= param->mRegionSelectionWeight->weight_safety;
-//     float w_turnControl = param->mRegionSelectionWeight->weight_turnControl;
-
-//     param->allRegion[i]->preference = 
-//                 w_speed * speed_diff +
-//                 w_gap * gap + 
-//                 w_dis * offset_diff + 
-//                 w_priority * priority +
-//                 w_permission * permission +
-//                 w_target * target +
-//                 w_blockage * blockage +
-//                 w_dir * dirPriority +
-//                 w_vel * velCosistent +
-//                 w_safe * (safety) +
-//                 w_turnControl * turnControl
-//                 ;
-          
-
-//     if( param->allRegion[i]->preference > maxCost )
-//     {
-//       bestSpaceID = i;
-//       maxCost = param->allRegion[i]->preference;
-//     }
+    // MTS_Vehicle *brokenVehicle = lane->getBlockage();
+    // bool blockage = lane->endOfRoad() || ( brokenVehicle != NULL && _checkBlockage( localization.situation.mRegion[i] ,  brokenVehicle ) );
     
-//     if( safeSpace && param->allRegion[i]->preference > maxValidCost )
-//     {
-//       validSpaceID = i;
-//       maxValidCost = param->allRegion[i]->preference;
-//     }
-//   }
-
-//   if( validSpaceID == -1 )
-//   {
-//     if( veh->needTocutIn && param->allRegion[0]->safety > 0.8f ) return param->allRegion[ 0 ]->offset;
-//     return vehLateralOffset;
-//   }
-
-//   if( validSpaceID == 0 )
-//   {
-//     return param->allRegion[ validSpaceID ]->offset;
-//   }
-
-//   if( veh->getLateralOffset() > param->allRegion[ validSpaceID ]->offset )
-//   {
-//     return param->allRegion[ validSpaceID ]->rightBorder - veh->getVehicleType()->getStaticWidth();
-//   }
-//   if( veh->getLateralOffset() < param->allRegion[ validSpaceID ]->offset )
-//   {
-//     return param->allRegion[ validSpaceID ]->leftBorder + veh->getVehicleType()->getStaticWidth();
-//   }
-  
-// }
-
-// bool MotionPlanStage::_checkLeftSafety( float desiredOffset , float *safeOffset , MTS_Region *region) const
-// {
-//   const std::vector< MTS_Vehicle* > &rearVehicles = mSubject->getLeftRearVehicles();
-//   std::vector< MTS_Vehicle* >::const_iterator it = rearVehicles.begin();
-//   std::vector< MTS_Vehicle* >::const_iterator vehEnd = rearVehicles.end();
-//   float lateralOffet = mSubject->getCurrentController()->getLateralOffset();
-//   float t = getLateralTime( desiredOffset );
-//   float v = ( desiredOffset - lateralOffet ) / t;
-//   bool safe = true;
-//   float safeTime;
-//   float minSafeTime = FLT_MAX;
-
-//   //check BorderVehicle
-//   if( region->leftBorderVehicle!=NULL && region->leftBorderVehicle->getActive() )
-//   {
-//     MTS_Vehicle* leftVeh = region->leftBorderVehicle;
-//     float leftVeh_desiredLateralOffset = leftVeh->getDesiredLateralOffset();
-//     float leftVehAngle = leftVeh->getCurrentController()->getYawAngle();
-//     float subjectAngle = mSubject->getCurrentController()->getYawAngle();
-//     bool lateralOverlap = (leftVeh->getVehicleType()->getDynamicWidth( leftVehAngle ) + mSubject->getVehicleType()->getDynamicWidth( subjectAngle )  )/2.0f < abs(leftVeh_desiredLateralOffset-desiredOffset) ;
-//     if( lateralOverlap )
-//     { 
-//       float vehHeadOffset = mSubject->getOffset() + mSubject->getVehicleType()->getDynamicLength( mSubject->getCurrentController()->getYawAngle() );
-//       float objetVehHeadOffset = leftVeh->getOffset() + leftVeh->getVehicleType()->getDynamicLength( leftVeh->getCurrentController()->getYawAngle() );
-//       if( vehHeadOffset <= objetVehHeadOffset )
-//         return 0.0f;
-//     }
-//   }
-
-//   if( safeOffset ) *safeOffset = desiredOffset;
-//   region->safety = 1.0;
-  
-//   for( ; it != vehEnd ; ++it )
-//   {
-//     bool checkSafe = _checkSafety( mSubject , *it , v , t , true , true , &safeTime );
-//     float patience = mSubject->getPatience();
-//     if( !checkSafe && patience > 0.75)
-//     {
-//       /*
-//       if( mSubject->getRelativeOffset( (*it) ) - (*it)->getCurrentController()->getLength()*(-2)*patience > 0.0 )
-//       {
-//         checkSafe = true;
-//         region.safety = 0.5;
-//       }
-//       */
-//       region->safety = 0.85;
-//       checkSafe = true;
-//     }
-
-//     if( !checkSafe )
-//     {
-//       if( safeOffset && safeTime < minSafeTime )
-//       {
-//         minSafeTime = safeTime;
-//         MTS_VehicleController *controller = (*it)->getCurrentController();
-//         float currentOffset = controller->getLateralOffset();
-//         float currentSpeed = controller->getLateralSpeed();
-//         float minDis = ( controller->getPsychoWidth( mSubject->getCurrentSpeed() ) + mSubject->getVehicleType()->getStaticWidth() ) / 2.0f + 2.0f;
-//         *safeOffset = currentOffset + currentSpeed * safeTime + minDis;
-      
-//       }
-//       safe = false;
-//       region->safety = 0.0;
-//     }
+    // float turnControl = _turnControl( veh , localization.situation.mRegion[i] );
     
-//     //if( safeTime >= 0 && mNecessityValue == 1.0f )
-//     //	involvedRear.push_back( InvolvedVehiclePair( *it , safeTime ) );
-//   }
+    // float w_dir			= param->mRegionSelectionWeight->weight_targetDirection;
+    // float w_blockage	= -param->mRegionSelectionWeight->weight_blockage;
+    // float w_priority	= param->mRegionSelectionWeight->weight_priority;
+    // float w_permission	= param->mRegionSelectionWeight->weight_permission; 
+    // float w_target		= param->mRegionSelectionWeight->weight_targetLane;
+    // float w_turnControl = param->mRegionSelectionWeight->weight_turnControl;
 
-//   const std::vector< MTS_Vehicle* > &frontVehicles = mSubject->getLeftFrontVehicles();
+    localization.situation.mRegion[i]->preference = w_speed * speed_diff + w_gap * gap + w_dis * offset_diff + w_vel * velCosistent + w_safe * (safety);
+                //+ w_dir * dirPriority + w_priority * priority + w_permission * permission + w_target * target + w_blockage * blockage + w_turnControl * turnControl;
+
+    // if( localization.situation.mRegion[i]->preference > max_cost )
+    // {
+    //   best_space_ID = i;
+    //   max_cost = localization.situation.mRegion[i]->preference;
+    // }
+    
+    if(safeSpace && localization.situation.mRegion[i]->preference > max_valid_cost)
+    {
+      valid_space_ID = i;
+      max_valid_cost = localization.situation.mRegion[i]->preference;
+    }
+  }
+
+  if(valid_space_ID == -1 )
+  {
+    if(localization.situation.mRegion[0]->safety > 0.8f ) // veh->needTocutIn &&
+      return localization.situation.mRegion[0]->offset;
+
+    return actor_lateral_offset;
+  }
+
+  if(valid_space_ID == 0)
+  {
+    return localization.situation.mRegion[valid_space_ID]->offset;
+  }
+
+  if(actor_lateral_offset > localization.situation.mRegion[valid_space_ID]->offset)
+  {
+    return localization.situation.mRegion[valid_space_ID]->rightBorder - actor_half_width * 2;
+  }
+  if(actor_lateral_offset < localization.situation.mRegion[valid_space_ID]->offset)
+  {
+    return localization.situation.mRegion[valid_space_ID]->leftBorder + actor_half_width * 2;
+  }
   
-//   it = frontVehicles.begin();
-//   vehEnd = frontVehicles.end();
+}
 
-//   for( ; it != vehEnd ; ++it )
-//   {
-//     bool checkSafe = _checkSafety( mSubject , *it , v , t , true , true , &safeTime );
-//     float patience = mSubject->getPatience();	
-//     if( !checkSafe && patience > 0.75)
-//     {
-
-      
-//       if( mSubject->getRelativeOffset( (*it) ) - (*it)->getCurrentController()->getLength()*(-2) > 0.0 )
-//       {
-//         checkSafe = true;
-//         region->safety = 0.5;
-//       }
-//     }
-
-//     if( !checkSafe )
-//     {
-//       if( safeOffset && safeTime < minSafeTime )
-//       {
-//         minSafeTime = safeTime;
-//         MTS_VehicleController *controller = (*it)->getCurrentController();
-//         float currentOffset = controller->getLateralOffset();
-//         float currentSpeed = controller->getLateralSpeed();
-//         float minDis = ( controller->getPsychoWidth( mSubject->getCurrentSpeed() ) + mSubject->getVehicleType()->getStaticWidth() ) / 2.0f + 2.0f;
-//         *safeOffset = currentOffset + currentSpeed * safeTime + minDis;
-//       }
-//       safe = false;
-//       region->safety = 0.0;
-//     }
-//     //if( safeTime >= 0 && mNecessityValue == 1.0f )
-//     //	involvedFront.push_back( InvolvedVehiclePair( *it , safeTime ) );
-//   }
-
-//   return safe;
-
-// }
-
-// bool MotionPlanStage::_checkSafety( MTS_Vehicle *subject , MTS_Vehicle *object , float moveSpeed , float moveTime , bool subjectAsLeader , bool subjectAsFollower , float* safeTime ) const
-// {
-//   MTS_VehicleController *subjectController = subject->getCurrentController();
-//   MTS_VehicleController *objectController = object->getCurrentController();
-//   const MTS_Edge *last = objectController->cooperate( subjectController );
-//   Vector2 v_s( subjectController->getCurrentSpeed() , moveSpeed );
-//   Vector2 v_o( objectController->getCurrentSpeed() , objectController->getLateralSpeed() );
-//   Vector2 p_r;
-//   p_r.y = object->getLateralSeparation( subject );
-//   p_r.x = object->getRelativeOffset( subject );
-//   Vector2 v_r = v_s - v_o;
-//   float hw_s = subjectController->getWidth()/2.0f;
-//   float hw_o = objectController->getPsychoWidth( mSubject->getCurrentSpeed() )/2.0f;
-//   float hl_s = subjectController->getLength()/2.0f;
-//   float hl_o = objectController->getLength()/2.0f;
-//   float d_y = ABS( p_r.y );
-//   float scale = ( d_y - hw_s - hw_o ) / d_y;
-//   scale = MAX( 0 , scale );
-//   float t_y = p_r.y * scale / v_r.y;
-
-//   if( safeTime ) *safeTime = t_y;
-
-//   if( t_y < 0 || t_y > moveTime) 
-//   {
-//     return true;
-//   }
+bool MotionPlanStage::CheckLeftSafety(ActorId actor_id, float desired_offset , float *safe_offset , MTS_Region *region) const
+{
+  float lateral_offet = simulation_state.GetLocation(actor_id).y; //local
+  float t = GetLateralTime(desired_offset);
+  float v = (desired_offset - lateral_offet) / t;
   
-//   float d_o = 
-//         v_o.x * object->getResponseTime() + 
-//         ( v_o.x * -v_r.x ) / ( 2 * sqrt( object->getMaxAcceleration() * object->getComfortableDeceleration() ) );
+  //check BorderVehicle
+  if(region->leftBorderVehicle)
+  {
+    ActorId *leftVeh = region->leftBorderVehicle;
+    float leftVeh_desiredLateralOffset = GetDesiredLateralOffset(leftVeh); // ???
+    bool lateralOverlap = (GetDynamicWidth(leftVeh) + GetDynamicWidth(actor_id)) / 2.0f < std::abs(leftVeh_desiredLateralOffset - desired_offset);
+    
+    if(lateralOverlap)
+    { 
+      float actor_head_offset = simulation_state.GetLocation(actor_id).x + GetDynamicLength(actor_id); //local
+      float target_head_offset = simulation_state.GetLocation(leftVeh).x + GetDynamicLength(leftVeh); //local
+      if(actor_head_offset <= target_head_offset)
+        return 0.0f;
+    }
+  }
+
+  bool safe = true;
+  float safe_time;
+  float min_safe_time = FLT_MAX;
+
+  if(safe_offset) 
+    *safe_offset = desired_offset;
+  region->safety = 1.0;
   
-//   float d_s = 
-//         v_s.x * subject->getResponseTime() + 
-//         ( v_s.x * v_r.x ) / ( 2 * sqrt( subject->getMaxAcceleration() * subject->getComfortableDeceleration() ) );
+  // for( ; it != vehEnd ; ++it )
+  // {
+  if(localization.surrounding.LeftRearVehicle)
+    ActorId left_rear_vehicle = localization.surrounding.LeftRearVehicle.get();
+  bool checkSafe = CheckSafety(actor_id, left_rear_vehicle, v, t, &safe_time);
+  //float patience = mSubject->getPatience();
+  // if( !checkSafe && patience > 0.75)
+  // {
+  //   region->safety = 0.85;
+  //   checkSafe = true;
+  // }
 
-//   d_o = MAX( 0 , d_o);
-//   d_s = MAX( 0 , d_s);
+  if( !checkSafe )
+  {
+    if( safe_offset && safe_time < min_safe_time )
+    {
+      min_safe_time = safe_time;
+      //MTS_VehicleController *controller = (*it)->getCurrentController();
+      float current_offset = simulation_state.GetLocation(left_rear_vehicle).y; //local //controller->getLateralOffset();
+      float current_speed = simulation_state.GetVelocity(left_rear_vehicle).y;//local //controller->getLateralSpeed();
+      float min_dis = (GetPsychoWidth(simulation_state.GetVelocity(actor_id).x) + simulation_state.GetDimensions(actor_id).y * 2) / 2.0f + 2.0f; // local
+      *safe_offset = current_offset + current_speed * safe_time + min_dis;
+    }
+    safe = false;
+    region->safety = 0.0;
+  }
+  //}
 
-//   float p_r_s = p_r.x + v_o.x * t_y;
-//   float p_r_o = p_r.x - v_s.x * t_y;
-//   float p_r_t = p_r.x - v_r.x * t_y ;
-//   float d_x = ABS( p_r_t );
-
-//   if( ( p_r_t < 0 && p_r_t + hl_s + hl_o < -d_o * subject->getGapAcceptRatio() ) || (  p_r_t >= 0 && p_r_t - hl_s - hl_o > d_s * subject->getGapAcceptRatio() ) )
-//     return true;
+  // const std::vector< MTS_Vehicle* > &frontVehicles = mSubject->getLeftFrontVehicles();
   
-//   return false;
-// }
+  // it = frontVehicles.begin();
+  // vehEnd = frontVehicles.end();
 
-// bool MotionPlanStage::_checkRightSafety( float desiredOffset , float *safeOffset , MTS_Region *region) const
-// {
-//   const std::vector< MTS_Vehicle* > &rearVehicles = mSubject->getRightRearVehicles();
-//   std::vector< MTS_Vehicle* >::const_iterator it = rearVehicles.begin();
-//   std::vector< MTS_Vehicle* >::const_iterator vehEnd = rearVehicles.end();
-//   float t = getLateralTime( desiredOffset );
-//   float lateralOffset = mSubject->getCurrentController()->getLateralOffset();
-//   float v = ( desiredOffset - lateralOffset ) / t;
-
-//   //check BorderVehicle
-//   if( region->rightBorderVehicle!=NULL && region->rightBorderVehicle->getActive() )
-//   {
-//     MTS_Vehicle* rightVeh = region->rightBorderVehicle;
-//     float rightVeh_desiredLateralOffset = rightVeh->getDesiredLateralOffset();
-//     float rightVehAngle = rightVeh->getCurrentController()->getYawAngle();
-//     float subjectAngle = mSubject->getCurrentController()->getYawAngle();
-//     bool lateralOverlap = (rightVeh->getVehicleType()->getDynamicWidth( rightVehAngle ) + mSubject->getVehicleType()->getDynamicWidth( subjectAngle ) )/2.0f < abs(rightVeh_desiredLateralOffset-desiredOffset) ;
-//     if( lateralOverlap )
-//     {
-//       float vehHeadOffset = mSubject->getOffset() + mSubject->getVehicleType()->getDynamicLength( mSubject->getCurrentController()->getYawAngle() );
-//       float objetVehHeadOffset = rightVeh->getOffset() + rightVeh->getVehicleType()->getDynamicLength( rightVeh->getCurrentController()->getYawAngle() );
-//       if( vehHeadOffset <= objetVehHeadOffset )
-//         return 0.0f;
-//     }
-
-//   }
-
-//   bool safe = true;
-//   float safeTime;
-//   float minSafeTime = FLT_MAX;
+  // for( ; it != vehEnd ; ++it )
+  // {
+  if(localization.surrounding.LeftFrontVehicle)
+    ActorId left_front_vehicle = localization.surrounding.LeftFrontVehicle.get();
   
-//   if( safeOffset ) *safeOffset = desiredOffset;
+  bool checkSafe = CheckSafety(actor_id, left_front_vehicle, v, t, &safe_time);
+  float patience = mSubject->getPatience();	
+  // if( !checkSafe && patience > 0.75)
+  // {
+  //   if( mSubject->getRelativeOffset( (*it) ) - (*it)->getCurrentController()->getLength()*(-2) > 0.0 )
+  //   {
+  //     checkSafe = true;
+  //     region->safety = 0.5;
+  //   }
+  // }
+
+  if(!checkSafe)
+  {
+    if(safe_offset && safe_time < min_safe_time)
+    {
+      min_safe_time = safe_time;
+      //MTS_VehicleController *controller = (*it)->getCurrentController();
+      float current_offset = simulation_state.GetLocation(left_front_vehicle).y; //controller->getLateralOffset();
+      float current_speed = simulation_state.GetVelocity(left_front_vehicle).y; //controller->getLateralSpeed();
+      float min_dis = (GetPsychoWidth(simulation_state.GetVelocity(actor_id).x) + simulation_state.GetDimensions(actor_id).y * 2) / 2.0f + 2.0f;
+      *safe_offset = current_offset + current_speed * safe_time + min_dis;
+    }
+    safe = false;
+    region->safety = 0.0;
+  }
+  //}
+  return safe;
+}
+
+bool MotionPlanStage::CheckSafety(ActorId *actor_id, ActorId *target_id, float moveSpeed, float moveTime, float* safeTime) const
+{
+  cg::Vector2D v_s(simulation_state.GetVelocity(actor_id).x, moveSpeed ); // need to transform local
+  cg::Vector2D v_o(simulation_state.GetVelocity(target_id).x, simulation_state.GetVelocity(target_id).y); // need to transform local
+  cg::Vector2D p_r(GetRelativeOffset(actor_id, target_id), GetLateralSeparation(actor_id, target_id));
+  cg::Vector2D v_r = v_s - v_o;
+
+  float hw_s = simulation_state.GetDimensions(actor_id).y;
+  float hw_o = GetPsychoWidth(simulation_state.GetVelocity(actor_id).x)/2.0f; //?
+  float hl_s = simulation_state.GetDimensions(actor_id).x;
+  float hl_o = simulation_state.GetDimensions(target_id).x;
+  float d_y = std::abs(p_r.y);
+  float scale = std::max(0, (d_y - hw_s - hw_o) / d_y);
+  float t_y = p_r.y * scale / v_r.y;
+
+  if(safeTime) 
+    *safeTime = t_y;
+
+  if(t_y < 0 || t_y > moveTime) 
+  {
+    return true;
+  }
   
-//   region->safety = 1.0;
+  float d_o = v_o.x * RESPONSE_TIME + (v_o.x * -v_r.x) / (2 * sqrt(MAX_ACC * COMFORTABLE_DEC));
+  float d_s = v_s.x * RESPONSE_TIME + (v_s.x * v_r.x) / (2 * sqrt(MAX_ACC * COMFORTABLE_DEC));
+
+  d_o = std::max( 0 , d_o);
+  d_s = std::max( 0 , d_s);
+
+  float p_r_s = p_r.x + v_o.x * t_y;
+  float p_r_o = p_r.x - v_s.x * t_y;
+  float p_r_t = p_r.x - v_r.x * t_y;
+  float d_x = std::abs( p_r_t );
+
+  if((p_r_t < 0 && p_r_t + hl_s + hl_o < -d_o * GAP_ACCEPT_RATIO) || (p_r_t >= 0 && p_r_t - hl_s - hl_o > d_s * GAP_ACCEPT_RATIO))
+    return true;
   
-//   for( ; it != vehEnd ; ++it )
-//   {
-//     bool checkSafe = _checkSafety( mSubject , *it , v , t , true , true , &safeTime );
-//     float patience = mSubject->getPatience();
-//     if( !checkSafe && patience > 0.75)
-//     {
-//       region->safety = 0.85;
-//       checkSafe = true;
-//     }
+  return false;
+}
 
-//     if( !checkSafe )
-//     {
-//       if( safeOffset && safeTime < minSafeTime )
-//       {
-//         minSafeTime = safeTime;
-//         MTS_VehicleController *controller = (*it)->getCurrentController();
-//         float currentOffset = controller->getLateralOffset();
-//         float currentSpeed = controller->getLateralSpeed();
-//         float minDis = ( controller->getPsychoWidth( mSubject->getCurrentSpeed() ) + mSubject->getVehicleType()->getStaticWidth() ) / 2.0f + 2.0f;
-//         *safeOffset = currentOffset + currentSpeed * safeTime - minDis;
-//       }
-//       safe = false;
-//       region->safety = 0.0;
-//     }
-//   }
+bool MotionPlanStage::CheckRightSafety(ActorId actor_id, float desired_offset , float *safe_offset , MTS_Region *region) const
+{
+  float lateral_offet = simulation_state.GetLocation(actor_id).y; //local 
+  float t = GetLateralTime(desired_offset);
+  float v = (desired_offset - lateral_offet) / t;
 
-//   const std::vector< MTS_Vehicle* > &frontVehicles = mSubject->getRightFrontVehicles();
+  //check BorderVehicle
+  if(region->rightBorderVehicle)
+  {
+    ActorId *rightVeh = region->rightBorderVehicle;
+    float rightVeh_desiredLateralOffset = GetDesiredLateralOffset(rightVeh); //???
+    bool lateralOverlap = (GetDynamicWidth(rightVeh) + GetDynamicWidth(actor_id)) / 2.0f < std::abs(rightVeh_desiredLateralOffset - desired_offset);
+
+    if( lateralOverlap )
+    {
+      float actor_head_offset = simulation_state.GetLocation(actor_id).x + GetDynamicLength(actor_id); //local
+      float target_head_offset = simulation_state.GetLocation(rightVeh).x + GetDynamicLength(rightVeh); //local
+      if( actor_head_offset <= target_head_offset )
+        return 0.0f;
+    }
+  }
+
+  bool safe = true;
+  float safe_time;
+  float min_safe_time = FLT_MAX;
   
-//   it = frontVehicles.begin();
-//   vehEnd = frontVehicles.end();
+  if( safe_offset ) 
+    *safe_offset = desired_offset;
+  
+  region->safety = 1.0;
+  
+  // for( ; it != vehEnd ; ++it )
+  // {
+  if(c)
+    ActorId right_rear_vehicle = localization.surrounding.RightRearVehicle.get();
+  
+  bool checkSafe = CheckSafety(actor_id, right_rear_vehicle, v, t, &safe_time);
+  // float patience = mSubject->getPatience();
+  // if( !checkSafe && patience > 0.75)
+  // {
+  //   region->safety = 0.85;
+  //   checkSafe = true;
+  // }
 
-//   for( ; it != vehEnd ; ++it )
-//   {
-//     bool checkSafe = _checkSafety( mSubject , *it , v , t , true , true , &safeTime );
-//     float patience = mSubject->getPatience();
-//     if( !checkSafe && patience > 0.75)
-//     {
-      
-      
-//       if( mSubject->getRelativeOffset( (*it) ) - (*it)->getCurrentController()->getLength()*(-2) > 0.0 )
-//       {
-//         checkSafe = true;
-//         region->safety = 0.5;
-//       }
-//     }
+  if( !checkSafe )
+  {
+    if( safe_offset && safe_time < min_safe_time )
+    {
+      min_safe_time = safe_time;
+      //MTS_VehicleController *controller = (*it)->getCurrentController();
+      float current_offset = simulation_state.GetLocation(right_rear_vehicle).y; //local
+      float current_speed = simulation_state.GetVelocity(right_rear_vehicle).y;//local
+      float min_dis = (GetPsychoWidth(simulation_state.GetVelocity(actor_id).x + simulation_state.GetDimensions(actor_id).y * 2) / 2.0f + 2.0f; //local
+      *safe_offset = current_offset + current_speed * safe_time - min_dis;
+    }
+    safe = false;
+    region->safety = 0.0;
+  }
+  //}
 
-//     if( !checkSafe )
-//     {
-//       if( safeOffset && safeTime < minSafeTime )
-//       {
-//         minSafeTime = safeTime;
-//         MTS_VehicleController *controller = (*it)->getCurrentController();
-//         float currentOffset = controller->getLateralOffset();
-//         float currentSpeed = controller->getLateralSpeed();
-//         float minDis = ( controller->getPsychoWidth( mSubject->getCurrentSpeed() ) + mSubject->getVehicleType()->getStaticWidth() ) / 2.0f + 2.0f;
-//         *safeOffset = currentOffset + currentSpeed  * safeTime - minDis;
-//       }
-//       safe = false;
-//       region->safety = 0.0;
-//     }
-//   }
+  // const std::vector< MTS_Vehicle* > &frontVehicles = mSubject->getRightFrontVehicles();
+  
+  // it = frontVehicles.begin();
+  // vehEnd = frontVehicles.end();
 
-//   return safe;
-// }
+  // for( ; it != vehEnd ; ++it )
+  // {
 
-// float MotionPlanStage::getLateralTime( float mDesiredLateralOffset ) const
-// {
-//   float diff_lat = mDesiredLateralOffset - mSubject->getCurrentController()->getLateralOffset();
-//   float v_lat = mSubject->getCurrentController()->getLateralSpeed();
-//   float t_lat = 2.0f * diff_lat / v_lat;
+  if(localization.surrounding.RightFrontVehicle)
+  ActorId right_front_vehicle = localization.surrounding.RightFrontVehicle.get();
+  
+  bool checkSafe = CheckSafety(actor_id, right_front_vehicle, v, t, &safe_time);
+  // float patience = mSubject->getPatience();
+  // if( !checkSafe && patience > 0.75)
+  // {
+    
+    
+  //   if( mSubject->getRelativeOffset( (*it) ) - (*it)->getCurrentController()->getLength()*(-2) > 0.0 )
+  //   {
+  //     checkSafe = true;
+  //     region->safety = 0.5;
+  //   }
+  // }
 
-//   // if the time to decelerate to zero lateral speed is smaller than maximum movement time
-//   if( t_lat > 0.0f && t_lat < mMaxMovementTime ) 
-//     return t_lat;
+  if( !checkSafe )
+  {
+    if( safe_offset && safe_time < min_safe_time )
+    {
+      min_safe_time = safe_time;
+      //MTS_VehicleController *controller = (*it)->getCurrentController();
+      float current_offset = simulation_state.GetLocation(right_front_vehicle).y; //local
+      float current_speed = simulation_state.GetVelocity(right_front_vehicle).y; //local
+      float min_dis = (GetPsychoWidth(simulation_state.GetVelocity(actor_id).x) + simulation_state.GetDimensions(actor_id).y * 2) / 2.0f + 2.0f;
+      *safe_offset = current_offset + current_speed  * safe_time - min_dis;
+    }
+    safe = false;
+    region->safety = 0.0;
+  }
+  //}
 
-//   float ttc = getLongitudinalTime();
+  return safe;
+}
 
-//   return ttc;
-// }
+float MotionPlanStage::GetLateralTime(float desired_lateral_offset, ActorId actor_id) const
+{
+  float lateral_offset = desired_lateral_offset - simulation_state.GetLocation(actor_id).y; //local
+  float lateral_veocity = simulation_state.GetVelocity(actor_id).y;
+  float lateral_time = 2.0f * lateral_offset / lateral_veocity;
 
-// void MotionPlanStage::updateBestLateralOffset( MTS_MovingModelParameter* param , MTS_Vehicle* mSubject)
-// {
-//   float newLateralOffset = _computeBestLateralOffset( mSubject , param );
-//   mSubject->setDesiredLateralOffset( newLateralOffset );
-// }
+  // if the time to decelerate to zero lateral speed is smaller than maximum movement time
+  if( lateral_time > 0.0f && lateral_time < MAX_MOVEMENT_TIME ) 
+    return lateral_time;
 
-// bool MotionPlanStage::_checkBlockage( MTS_Region *space, const MTS_Vehicle *blockage ) const
-// {
-//   float spaceCenter = ( space->leftBorder + space->rightBorder ) / 2.0f;
-//   float blockageCenter = blockage->getCurrentController()->getLateralOffset();
-//   float spaceWidth = space->width;
-//   float blockageWidth = blockage->getCurrentController()->getWidth(); 
-//   float lateralSeparation = ABS( spaceCenter - blockageCenter );
-//   if( lateralSeparation <= ( spaceWidth + blockageWidth ) / 2.0f )
-//     return true;
+  return GetLongitudinalTime(sctor_id);
+}
 
-//   return false;
-// }
+void MotionPlanStage::UpdateBestLateralOffset( MTS_MovingModelParameter* param , MTS_Vehicle* mSubject)
+{
+  float newLateralOffset = ComputeBestLateralOffset( mSubject , param );
+  SetDesiredLateralOffset( newLateralOffset );
+}
 
+bool MotionPlanStage::CheckBlockage(LocalizationData &localization, ActorId *blockage ) const
+{
+  float space_center = (localization.region.leftBorder + localization.region.rightBorder) / 2.0f;
+  float blockage_center = simulation_state.GetLocation(blockage).y; //local
+  float space_width = localization.region.width;
+  float blockage_width = simulation_state.GetDimensions(blockage).y; 
+  float lateral_separation = std::abs(space_center - blockage_center);
+  if(lateral_separation <= (space_width + blockage_width) / 2.0f)
+    return true;
 
-// // Tool
-// float MotionPlanStage::getGap(int actor_id, int object_id) const
-// {
-// 	float halfPredLen = simulation_state.GetDimensions(object_id).x; //pred->getCurrentController()->getLength() / 2.0f;
-// 	float halfVehLen = simulation_state.GetDimensions(actor_id).x; //getLength() / 2.0f;
-// 	float relativeOffset = getRelativeOffset(actor_id, object_id);
-// 	float gap = relativeOffset - (halfPredLen + halfVehLen);
+  return false;
+}
+
+// Tool
+float MotionPlanStage::GetGapToStopLine(ActorId actor_id, float stopOffset) const
+{
+	float halfVehLen = simulation_state.GetDimensions(actor_id).x;
+	//float headOffset = getOffset() + halfVehLen; // self.location
+
+	return stopOffset - halfVehLen;
+}
+
+float MotionPlanStage::GetGapToStopLine() const
+{
+  float halfVehLen = simulation_state.GetDimensions(actor_id).x;
+  // float headOffset = getOffset() + halfVehLen;
+  float stopOffset = getLane()->getLength();
+  //trafficlight location - halflength
+
+  return stopOffset - headOffset;
+}
+
+float MotionPlanStage::GetGap(ActorId actor_id, ActorId target_id)
+{
+	float halfPredLen = simulation_state.GetDimensions(target_id).x; //pred->getCurrentController()->getLength() / 2.0f;
+	float halfVehLen = simulation_state.GetDimensions(actor_id).x; //getLength() / 2.0f;
+	float relativeOffset = GetRelativeOffset(actor_id, target_id);
+	float gap = relativeOffset - (halfPredLen + halfVehLen);
 	
-// 	return gap;
-// }
+	return gap;
+}
 
-// float MotionPlanStage::getGapToStopLine(float stopOffset, int actor_id) const
-// {
-// 	float halfVehLen = simulation_state.GetDimensions(actor_id).x;
-// 	float headOffset = getOffset() + halfVehLen; // self.location
-
-// 	return stopOffset - headOffset;
-// }
-
-// float MotionPlanStage::GetRelativeOffset(int actor_id, int actor_id) const
-// {
-//   float object_offset = simulation_state.GetLocation(object_id);
-//   float self_offset = simulation_state.GetLocation(actor_id);
-
-//   return self_offset - object_offset;
-// } 
-
-// float MotionPlanStage::getExtendedGap( const MTS_Vehicle *pred ) const
-// {
-//   MTS_VehicleController *controller = pred->getCurrentController();
-
-//   if( controller->getYawAngle() == 0.0f )
-//     return 0.0f;
-
-//   float sepLatOffset = controller->getSeparationLateralOffset();
-//   float myLatOffset = getLateralOffset();
-
-//   float predHalfWidth = pred->getCurrentController()->getPsychoWidth( mSubject->getCurrentSpeed() ) / 2.0f;
-//   float myHalfWidth = simulation_state.GetDimensions(actor_id).x; //mSubject->mType->getStaticWidth() / 2.0f;
-//   float latSeparation = mSubject->getLateralSeparation( pred );
-//   latSeparation = ABS( latSeparation );
+float MotionPlanStage::GetExtendedGap(ActorId actor_id, ActorId target_id)
+{
+  float actor_yaw = simulation_state.GetRotation(actor_id).yaw;
   
-//   if( latSeparation > predHalfWidth + myHalfWidth )
-//     return 0.0f;
+  if(actor_yaw == 0.0f)
+    return 0.0f;
 
-//   float myLeftLatOffset = myLatOffset - myHalfWidth;
-//   float myRightLatOffset = myLatOffset + myHalfWidth;
-//   float extendedGap = 0.0f;
+  float actor_yaw_abs = std::abs(actor_yaw);
+	float halfVehLen = simulation_state.GetDimensions(actor_id).x;
+  float halfWidth = simulation_state.GetDimensions(actor_id).y;
+
+  float width1 = halfVehLen * 2 * sin(actor_yaw_abs);
+  float width2 = halfWidth * 2 * cos(actor_yaw_abs);
+  float length1 = halfVehLen * 2 * cos(actor_yaw_abs);
+	float length2 = halfWidth * 2 * sin(actor_yaw_abs);
+
+  float LeftWidth = 0.0f;
+  float RightWidth = 0.0f;
+  float MaxLeftGap = 0.0f;
+  float MaxRightGap = 0.0f;
+
+  if( actor_yaw > 0 )
+  {
+    LeftWidth = width2;
+    RightWidth = width1;
+    MaxLeftGap = length2;
+    MaxRightGap = length1;
+  }
   
-//   if( myLeftLatOffset > sepLatOffset )
-//     extendedGap = controller->getExtendedDistance( myLeftLatOffset );
-//   else if( myRightLatOffset < sepLatOffset )
-//     extendedGap = controller->getExtendedDistance( myRightLatOffset );
+  else
+  {
+    LeftWidth = width1;
+    RightWidth = width2;
+    MaxLeftGap = length1;
+    MaxRightGap = length2;
+  }
+    
+  float sepLatOffset = LeftWidth - halfWidth;
+  float predHalfWidth = simulation_state.GetDimensions(target_id).y; 
+  float myHalfWidth = simulation_state.GetDimensions(actor_id).y;
+  float latSeparation = std::abs(GetLateralSeparation(actor_id, target_id));
 
-//   return extendedGap;
-// }
+  if( latSeparation > predHalfWidth + myHalfWidth )
+    return 0.0f;
 
+  float myLeftLatOffset = -myHalfWidth;
+  float myRightLatOffset = myHalfWidth;
+  float extendedGap = 0.0f;
+  
+  if(myLeftLatOffset > sepLatOffset)
+  {
+    float ratio = std::min((myLeftLatOffset - sepLatOffset) / RightWidth, 1.0f);
+    extendedGap = MaxRightGap * ratio;
+  }
+  else if(myRightLatOffset < sepLatOffset)
+  {
+    float ratio = std::min((sepLatOffset - myRightLatOffset) / LeftWidth, 1.0f);
+		extendedGap = MaxLeftGap * ratio;
+  }
+
+  return extendedGap;
+}
+
+float MotionPlanStage::GetRelativeOffset(ActorId actor_id, ActorId target_id)
+{
+  cg::Location target_location = simulation_state.GetLocation(target_id);
+
+  std::array<float, 4> result = GlobalToLocal(actor_id, target_location);
+
+  return -result[0];
+} 
+
+float MotionPlanStage::GetLateralSeparation(ActorId actor_id, ActorId target_id)
+{
+  cg::Location target_location = simulation_state.GetLocation(target_id);
+
+  std::array<float, 4> result = GlobalToLocal(actor_id, target_location);
+
+  return -result[1];
+} 
+
+float MotionPlanStage::GetDynamicWidth(ActorId actor_id) const
+{
+  float yaw_angle = simulation_state.GetRotation(actor_id).yaw;
+  float width = simulation_state.GetDimensions(actor_id).y * 2;
+
+  if(yaw_angle == 0)
+    return width;
+
+  float length = simulation_state.GetDimensions(actor_id).x * 2;
+  float diagonal_length = sqrt(length * length + width * width);
+  float base_angle = acos(length / diagonal_length);
+  float angle_1 = std::abs(yaw_angle + base_angle);
+  float angle_2 = std::abs(yaw_angle - base_angle);
+
+  if(yaw_angle > 0)
+    return diagonal_length * sin(angle_1);
+  
+  return diagonal_length * sin(angle_2);
+}
+
+float MotionPlanStage::GetDynamicLength(ActorId actor_id) const
+{
+  float yaw_angle = simulation_state.GetRotation(actor_id).yaw;
+  float length = simulation_state.GetDimensions(actor_id).x * 2;
+
+  if(yaw_angle == 0)
+    return length;
+
+  float width = simulation_state.GetDimensions(actor_id).y * 2;
+  float diagonal_length = sqrt(length * length + width * width);
+  float base_angle = acos(length / diagonal_length);
+
+  float angle_1 = std::abs(yaw_angle + base_angle);
+  float angle_2 = std::abs(yaw_angle - base_angle);
+
+  if(yaw_angle > 0)
+    return diagonal_length * cos(angle_2);
+ 
+  return diagonal_length * cos(angle_1);
+}
+
+// Transform
+std::array<float, 4> MotionPlanStage::GlobalToLocal(ActorId actor_id, cg::Location location)
+{
+  cg::Location actor_location = simulation_state.GetLocation(actor_id);
+  cg::Rotation actor_rotation = simulation_state.GetRotation(actor_id);
+  cg::Transform transform(actor_location, actor_rotation);
+  std::array<float, 16> M_inv = transform.GetInverseMatrix(); // world to local
+  std::array<float, 4> global_location = {location.x, location.y, location.z, 1.0f};
+  
+  return matrixMultiply(M_inv, global_location);
+}
+
+std::array<float, 4> MotionPlanStage::matrixMultiply(std::array<float, 16> M, std::array<float, 4> V)
+{
+  std::array<float, 4> result;
+  
+  for(size_t i=0; i < V.size(); i++ ){ // should check column or row major
+    result[i]= M[4*i] * V[0] + M[4*i+1] * V[1] + M[4*i+2] * V[2] + M[4*i+3] * V[3];
+  }
+
+  return result;
+}
 
 } // namespace traffic_manager
 } // namespace carla
