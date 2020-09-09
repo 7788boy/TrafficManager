@@ -71,21 +71,37 @@ public:
 
   void DrawLeader(ActorId actor_id, LocalizationData &output);
 
-  void UpdateLeader(const unsigned long index);
+  void DrawNeighbor(ActorId actor_id, LocalizationData &output);
 
-  void UpdateNeighbor(const unsigned long index);
+  void DrawRegion(ActorId actor_id, LocalizationData &output);
 
-  void GetLeftVehicle(const unsigned long index);
+  void MTSUpdate(const unsigned long index);
 
-  void GetRightVehicle(const unsigned long index);
+  MTS_Region GetRegion(ActorId actor_id, boost::optional<ActorId> target_id, SimpleWaypointPtr target_waypoint, float direction);
+  
+  // void UpdateLeader(const unsigned long index);
 
-  void GetSurroundVehicle(const unsigned long index);
+  // void UpdateNeighbor(const unsigned long index);
 
-  bool isOverlapped(ActorId actor_id, ActorId target_id, float target_location_y) const;
+  // void GetLeftVehicle(const unsigned long index);
+
+  // void GetRightVehicle(const unsigned long index);
+
+  // void GetSurroundVehicle(const unsigned long index);
+
+  // bool isOverlapped(ActorId actor_id, ActorId target_id, float target_location_y) const;
+
+  // bool isLogitudinalOverlapped(ActorId actor_id, ActorId target_id, float target_location_x) const;
   
   std::array<float, 4> GlobalToLocal(ActorId actor_id, cg::Location global_location);
 
+  cg::Location LocalToGlobal(ActorId actor_id, cg::Location local_location);
+
   std::array<float, 4> matrixMultiply(std::array<float, 16> M, std::array<float, 4>  V);
+
+  float GetGap(ActorId actor_id, ActorId target_id);
+
+  float GetRelativeOffset(ActorId actor_id, ActorId target_id);
 
 };
 

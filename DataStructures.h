@@ -33,85 +33,57 @@ using BufferMap = std::unordered_map<carla::ActorId, Buffer>;
 using TimeInstance = chr::time_point<chr::system_clock, chr::nanoseconds>;
 using TLS = carla::rpc::TrafficLightState;
 
-struct MTS_Leader{
-  boost::optional<ActorId> main_leader;
-  boost::optional<ActorId> potential_leader;
-  boost::optional<ActorId> pre_main_leader;
-  boost::optional<ActorId> pre_potential_leader;
-};
-
-struct MTS_Neighbor{
-  
-  bool updated;
-  std::vector< ActorId > vehicles;
-};
-
-enum class Direction : short
+struct MTS_Leader
 {
-  LEFTREAR,
-  LEFTFRONT,
-  RIGHTREAR,
-  RIGHTFRONT
+  boost::optional<ActorId> MainLeader;
+  boost::optional<ActorId> PotentialLeader;
 };
 
-struct MTS_Surrounding
+struct MTS_Neighbor
 {
-    // MTS_Leader* leader;
-
-    // MTS_Vehicle* mPassedLeadingVehicle;
-    // MTS_Vehicle* mExpectedLeadingVehicle;
-    // MTS_Vehicle* prevFirstLeader;
-    // MTS_Vehicle* prevSecondLeader;
-
-    // std::unordered_map<Direction, MTS_Neighbor*> neighbor;
-    std::unordered_map<Direction, std::shared_ptr<MTS_Neighbor>> neighbor;
-
-    // std::vector< std::pair< MTS_Vehicle*,float > > mNeighbor;
-    // std::vector< MTS_Vehicle* > mLeftRearVehicles;
-    // std::vector< MTS_Vehicle* > mLeftFrontVehicles;
-    // std::vector< MTS_Vehicle* > mRightRearVehicles;
-    // std::vector< MTS_Vehicle* > mRightFrontVehicles;
-    boost::optional<ActorId> LeftVehicle;
-    boost::optional<ActorId> RightVehicle;
-    // bool mLeftRearVehiclesUpdated;
-    // bool mLeftFrontVehiclesUpdated;
-    // bool mRightRearVehiclesUpdated;
-    // bool mRightFrontVehiclesUpdated;
+  boost::optional<ActorId> LeftVehicle;
+  boost::optional<ActorId> RightVehicle;
+  boost::optional<ActorId> LeftFrontVehicle;
+  boost::optional<ActorId> RightFrontVehicle;
+  boost::optional<ActorId> LeftRearVehicle;
+  boost::optional<ActorId> RightRearVehicle;
 };
 
 struct MTS_Region
 {
-    float leftBorder;
-    float rightBorder;
-    float offset;
-    float width;
-    float maxPassingSpeed;
-    float gap;
-    float safety;
-    ActorId leftBorderVehicle, rightBorderVehicle;
-    std::vector< ActorId > frontVehicles;
-    std::vector< ActorId > rearVehicles;
-    float preference;
+  float leftBorder;
+  float rightBorder;
+  cg::Location location;
+  //cg::Rotation rotation;
+  float width;
+  float maxPassingSpeed;
+  float gap;
+  float safety;
+  boost::optional<ActorId> leftBorderVehicle, rightBorderVehicle;
+  std::vector<boost::optional<ActorId>> frontVehicles;
+  std::vector<boost::optional<ActorId>> rearVehicles;
+  float preference;
 };
 
-struct MTS_SituationData {
-  MTS_Neighbor* mNeighbor;
-  std::vector<MTS_Region>	mRegion;
-  MTS_Region mCurrentRegion;
-  bool mSpaceOriented;
-  //MTS_Lane* mLane;
-  //MTS_Edge* mEdge;
+struct MTS_SituationData 
+{
+  std::vector<MTS_Region>	CandidateRegions;
+  MTS_Region CurrentRegion;
+  bool SpaceOriented = false;
   float safety;
+  // MTS_Lane* mLane;
+  // MTS_Edge* mEdge;
+  // MTS_Neighbor* mNeighbor;
 };
 
 struct LocalizationData {
   SimpleWaypointPtr junction_end_point;
   SimpleWaypointPtr safe_point;
   bool is_at_junction_entrance;
-  MTS_Leader leader;
-  MTS_Surrounding surrounding;
-  MTS_Region region;
 
+  MTS_Leader leader;
+  MTS_Neighbor neighbor;
+  MTS_SituationData situation;
 };
 using LocalizationFrame = std::vector<LocalizationData>;
 
@@ -120,6 +92,7 @@ struct CollisionHazardData {
   ActorId hazard_actor_id;
   bool hazard;
 };
+
 using CollisionFrame = std::vector<CollisionHazardData>;
 
 using ControlFrame = std::vector<carla::rpc::Command>;

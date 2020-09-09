@@ -51,7 +51,7 @@ void MotionPlanStage::Update(const unsigned long index) {
   const bool ego_physics_enabled = simulation_state.IsPhysicsEnabled(actor_id);
   const Buffer &waypoint_buffer = buffer_map.at(actor_id);
   const LocalizationData &localization = localization_frame.at(index);
-  const CollisionHazardData &collision_hazard = collision_frame.at(index);
+  const CollisionHazardData &collision_hazard = collision_frame.at(index); //
   const bool &tl_hazard = tl_frame.at(index);
 
   const float target_point_distance = std::max(ego_speed * TARGET_WAYPOINT_TIME_HORIZON,
@@ -88,13 +88,13 @@ void MotionPlanStage::Update(const unsigned long index) {
   }
 
   // Target velocity for vehicle.
-  const float ego_speed_limit = simulation_state.GetSpeedLimit(actor_id);
-  //float max_target_velocity = parameters.GetVehicleTargetVelocity(actor_id, ego_speed_limit) / 3.6f;
+  const float ego_speed_limit = simulation_state.GetSpeedLimit(actor_id); //
+  float max_target_velocity = parameters.GetVehicleTargetVelocity(actor_id, ego_speed_limit) / 3.6f; // km/hr -> m/s
 
   // Collision handling and target velocity correction.
-  //std::pair<bool, float> collision_response = CollisionHandling(collision_hazard, tl_hazard, ego_velocity, ego_heading, max_target_velocity);
-  bool collision_emergency_stop = false; //collision_response.first;
-  float dynamic_target_velocity = GetLongitudinalAcc(localization, actor_id); //collision_response.second;
+  std::pair<bool, float> collision_response = CollisionHandling(collision_hazard, tl_hazard, ego_velocity, ego_heading, max_target_velocity); //
+  bool collision_emergency_stop = collision_response.first; //false;
+  float dynamic_target_velocity = collision_response.second; //ego_speed + 0.02f * GetLongitudinalAcc(localization, actor_id);
 
   // Don't enter junction if there isn't enough free space after the junction.
   bool safe_after_junction = SafeAfterJunction(localization, tl_hazard, collision_emergency_stop);
@@ -241,10 +241,7 @@ std::pair<bool, float> MotionPlanStage::CollisionHandling(const CollisionHazardD
     const cg::Vector3D other_velocity = simulation_state.GetVelocity(other_actor_id);
     const float ego_relative_speed = (ego_velocity - other_velocity).Length();
     const float available_distance_margin = collision_hazard.available_distance_margin;
-
     const float other_speed_along_heading = cg::Math::Dot(other_velocity, ego_heading);
-
-    //dynamic_target_velocity = GetLongitudinalAcc(ego_velocity.Length(), tl_hazard, float desired_velocity, other_velocity.Length(), float gap);
     
     // Consider collision avoidance decisions only if there is positive relative velocity
     // of the ego vehicle (meaning, ego vehicle is closing the gap to the lead vehicle).
@@ -298,10 +295,10 @@ float MotionPlanStage::GetLongitudinalAcc(const LocalizationData &localization, 
   float brake_first = 0.0f;
   float brake_second = 0.0f;
   
-  if(localization.leader.main_leader)
-    brake_first = GetAcc(actor_id, localization.leader.main_leader.get());
-  if(localization.leader.potential_leader)
-    brake_second = GetAcc(actor_id, localization.leader.potential_leader.get());
+  if(localization.leader.MainLeader)
+    brake_first = GetAcc(actor_id, localization.leader.MainLeader.get());
+  if(localization.leader.PotentialLeader)
+    brake_second = GetAcc(actor_id, localization.leader.PotentialLeader.get());
   
   float max_deceleration = std::max(brake_first, brake_second);
 
@@ -399,7 +396,7 @@ float MotionPlanStage::GetDecForStopLine(ActorId actor_id, float stopLine)
 
 	return COMFORTABLE_DEC * (s * s) / (gap * gap);
 }*/
-
+/*
 // Lateral velocity.
 float MotionPlanStage::GetSpeedChange(ActorId* actor_id)
 {
@@ -846,8 +843,9 @@ bool MotionPlanStage::CheckBlockage(LocalizationData &localization, ActorId *blo
 
   return false;
 }
-
+*/
 // Tool
+/*
 float MotionPlanStage::GetGapToStopLine(ActorId actor_id, float stopOffset) const
 {
 	float halfVehLen = simulation_state.GetDimensions(actor_id).x;
@@ -865,7 +863,7 @@ float MotionPlanStage::GetGapToStopLine() const
 
   return stopOffset - headOffset;
 }
-
+*/
 float MotionPlanStage::GetGap(ActorId actor_id, ActorId target_id)
 {
 	float halfPredLen = simulation_state.GetDimensions(target_id).x; //pred->getCurrentController()->getLength() / 2.0f;
