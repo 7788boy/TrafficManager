@@ -77,8 +77,11 @@ public:
   float GetLateralSeparation(ActorId actor_id, ActorId target_id);
   float GetDynamicWidth(ActorId actor_id) const;
   float GetDynamicLength(ActorId actor_id) const;
-  std::array<float, 4> GlobalToLocal(ActorId actor_id, cg::Location location);
-  std::array<float, 4> matrixMultiply(std::array<float, 16> M, std::array<float, 4> V);
+  void GlobalToLocal(ActorId actor_id, cg::Location &location);
+  void LocalToGlobal(ActorId actor_id, cg::Location &location);
+
+  //std::array<float, 4> GlobalToLocal(ActorId actor_id, cg::Location location);
+  //std::array<float, 4> matrixMultiply(std::array<float, 16> M, std::array<float, 4> V);
 
 };
 

@@ -51,8 +51,8 @@ struct MTS_Neighbor
 
 struct MTS_Region
 {
-  float leftBorder;
-  float rightBorder;
+  cg::Location leftBorder;
+  cg::Location rightBorder;
   cg::Location location;
   //cg::Rotation rotation;
   float width;
@@ -71,6 +71,7 @@ struct MTS_SituationData
   MTS_Region CurrentRegion;
   bool SpaceOriented = false;
   float safety;
+  float desiredOffset;
   // MTS_Lane* mLane;
   // MTS_Edge* mEdge;
   // MTS_Neighbor* mNeighbor;
