@@ -19,8 +19,13 @@ namespace traffic_manager {
 
 namespace cc = carla::client;
 
+namespace crd = carla::road;
+
 using LocalMapPtr = std::shared_ptr<InMemoryMap>;
 using LaneChangeLocationMap = std::unordered_map<ActorId, cg::Location>;
+
+using RoadSectionPair = std::pair<crd::RoadId, crd::SectionId>;
+using LocalRoadInfo = std::unordered_map<RoadSectionPair, crd::LaneId, boost::hash<RoadSectionPair>>;
 
 /// This class has functionality to maintain a horizon of waypoints ahead
 /// of the vehicle for it to follow.
@@ -104,6 +109,9 @@ public:
 
   void GlobalToLocal(ActorId actor_id, cg::Location &location);
   void LocalToGlobal(ActorId actor_id, cg::Location &location);
+
+    void GetLocalRoadInfo(LocalRoadInfo& info, const crd::Lane& lane);
+
 
   // void UpdateLeader(const unsigned long index);
   // void UpdateNeighbor(const unsigned long index);

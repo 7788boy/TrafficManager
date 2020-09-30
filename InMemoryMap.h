@@ -81,6 +81,13 @@ namespace bgi = boost::geometry::index;
 
     std::string GetMapName();
 
+    const crd::Lane &GetLane(SimpleWaypointPtr reference_waypoint) const;
+    const crd::Lane &GetLeftLane(SimpleWaypointPtr reference_waypoint) const;
+    const crd::Lane &GetRightLane(SimpleWaypointPtr reference_waypoint) const;
+    const crd::Road &GetRoad(SimpleWaypointPtr reference_waypoint) const;
+    const crd::Lane &GetLaneById(const crd::RoadId road_id, crd::SectionId section_id, crd::LaneId lane_id) const;
+    const crd::Road &GetRoadById(const crd::RoadId id) const;
+
   private:
 
     /// This method is used to find and place lane change links.

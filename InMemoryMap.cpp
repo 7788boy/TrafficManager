@@ -10,6 +10,7 @@
 namespace carla {
 namespace traffic_manager {
 
+  namespace crd = carla::road;
 
   namespace cg = carla::geom;
   using namespace constants::Map;
@@ -316,6 +317,40 @@ namespace traffic_manager {
   std::string InMemoryMap::GetMapName() {
     assert(_world_map != nullptr && "No map reference found.");
     return _world_map->GetName();
+  }
+
+  const crd::Lane &InMemoryMap::GetLane(SimpleWaypointPtr reference_waypoint) const{
+    assert(_world_map != nullptr && "No map reference found.");
+    crd::element::Waypoint raw_waypoint = reference_waypoint->GetWaypoint()->GetRoadWaypoint();
+    return _world_map->GetMap().GetLane(raw_waypoint);
+  }
+
+  const crd::Lane &InMemoryMap::GetLeftLane(SimpleWaypointPtr reference_waypoint) const{
+    assert(_world_map != nullptr && "No map reference found.");
+    crd::element::Waypoint raw_waypoint = reference_waypoint->GetWaypoint()->GetLeft()->GetRoadWaypoint();
+    return _world_map->GetMap().GetLane(raw_waypoint);
+  }
+
+  const crd::Lane &InMemoryMap::GetRightLane(SimpleWaypointPtr reference_waypoint) const{
+    assert(_world_map != nullptr && "No map reference found.");
+    crd::element::Waypoint raw_waypoint = reference_waypoint->GetWaypoint()->GetRight()->GetRoadWaypoint();
+    return _world_map->GetMap().GetLane(raw_waypoint);
+  }
+
+  const crd::Road &InMemoryMap::GetRoad(SimpleWaypointPtr reference_waypoint) const{
+    assert(_world_map != nullptr && "No map reference found.");
+    crd::element::Waypoint raw_waypoint = reference_waypoint->GetWaypoint()->GetRoadWaypoint();
+    return _world_map->GetMap().GetRoad(raw_waypoint);
+  }
+
+  const crd::Lane &InMemoryMap::GetLaneById(const crd::RoadId road_id, crd::SectionId section_id, crd::LaneId lane_id) const{
+    assert(_world_map != nullptr && "No map reference found.");
+    return _world_map->GetMap().GetLaneById(road_id, section_id, lane_id);
+  }
+
+  const crd::Road &InMemoryMap::GetRoadById(const crd::RoadId id) const{
+    assert(_world_map != nullptr && "No map reference found.");
+    return _world_map->GetMap().GetRoadById(id);
   }
 
 } // namespace traffic_manager
